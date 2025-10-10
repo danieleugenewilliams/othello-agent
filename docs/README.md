@@ -6,27 +6,27 @@ Welcome to the Othello AI Agent documentation. This directory contains comprehen
 
 ### Core Documents
 
-- **[📋 PRD.md](./PRD.md)** - Product Requirements Document
+- **[PRD.md](./PRD.md)** - Product Requirements Document
   - Vision, goals, and user stories
   - Success metrics and constraints
   - Market analysis and competitive landscape
 
-- **[📝 REQUIREMENTS.md](./REQUIREMENTS.md)** - Technical Requirements Specification  
+- **[REQUIREMENTS.md](./REQUIREMENTS.md)** - Technical Requirements Specification  
   - Functional and non-functional requirements
   - System requirements and compatibility
   - Acceptance criteria and testing requirements
 
-- **[🏗️ ARCHITECTURE.md](./ARCHITECTURE.md)** - System Architecture Documentation
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - System Architecture Documentation
   - High-level system design
   - Component interactions and data flow
   - Security and deployment architecture
 
-- **[👤 USAGE.md](./USAGE.md)** - User Guide and Manual
+- **[USAGE.md](./USAGE.md)** - User Guide and Manual
   - Installation and setup instructions
   - Basic and advanced usage examples
   - Configuration and troubleshooting
 
-- **[⚙️ IMPLEMENTATION.md](./IMPLEMENTATION.md)** - Development Implementation Guide
+- **[IMPLEMENTATION.md](./IMPLEMENTATION.md)** - Development Implementation Guide
   - Phase-by-phase development plan
   - Code examples and patterns
   - Testing and deployment strategies
@@ -148,17 +148,17 @@ othello mcp add filesystem npx @modelcontextprotocol/server-filesystem /path/to/
 ## Development Workflow
 
 ### Phase 1: Foundation (Weeks 1-4)
-- ✅ Basic project structure and CLI
-- ✅ Configuration system with Viper
-- ✅ Basic MCP client (STDIO transport)
-- ✅ Ollama integration
-- ✅ Simple TUI interface
+- [Complete] Basic project structure and CLI
+- [Complete] Configuration system with Viper
+- [Complete] Basic MCP client (STDIO transport)
+- [Complete] Ollama integration
+- [Complete] Simple TUI interface
 
 ### Phase 2: Core Features (Weeks 5-8)
-- 🔄 Tool discovery and registry
-- 🔄 Tool execution engine
-- 🔄 Conversation management
-- 🔄 Enhanced TUI with multiple views
+- [In Progress] Tool discovery and registry
+- [In Progress] Tool execution engine
+- [In Progress] Conversation management
+- [In Progress] Enhanced TUI with multiple views
 
 ### Phase 3: Advanced Features (Weeks 9-12)
 - ⏳ HTTP transport for MCP
@@ -174,7 +174,7 @@ othello mcp add filesystem npx @modelcontextprotocol/server-filesystem /path/to/
 
 ## Contributing
 
-We welcome contributions! Please see our [contribution guidelines](../CONTRIBUTING.md) for details on:
+We welcome contributions! See our [contribution guidelines](../CONTRIBUTING.md) for details on:
 
 - Code style and standards
 - Pull request process  
@@ -198,15 +198,15 @@ Othello is released under the [MIT License](../LICENSE), making it free for both
 
 | Document | Status | Last Updated | Next Review |
 |----------|--------|--------------|-------------|
-| PRD.md | ✅ Complete | 2025-10-10 | 2025-11-01 |
-| REQUIREMENTS.md | ✅ Complete | 2025-10-10 | 2025-11-01 |
-| ARCHITECTURE.md | ✅ Complete | 2025-10-10 | 2025-11-01 |
-| USAGE.md | ✅ Complete | 2025-10-10 | 2025-11-01 |
-| IMPLEMENTATION.md | ✅ Complete | 2025-10-10 | 2025-11-01 |
+| PRD.md | [Complete] Complete | 2025-10-10 | 2025-11-01 |
+| REQUIREMENTS.md | [Complete] Complete | 2025-10-10 | 2025-11-01 |
+| ARCHITECTURE.md | [Complete] Complete | 2025-10-10 | 2025-11-01 |
+| USAGE.md | [Complete] Complete | 2025-10-10 | 2025-11-01 |
+| IMPLEMENTATION.md | [Complete] Complete | 2025-10-10 | 2025-11-01 |
 
 ## Feedback
 
-Documentation feedback is always welcome! Please:
+Documentation feedback is always welcome!
 - Open an issue for corrections or improvements
 - Submit pull requests for minor fixes
 - Join our Discord for real-time discussion

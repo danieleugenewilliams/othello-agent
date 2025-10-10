@@ -364,7 +364,7 @@ You: Can you list the files in my Documents folder?
 
 Othello: I'll check your Documents folder for you.
 
-🔧 Using tool: filesystem_list_directory
+Using tool: filesystem_list_directory
    Parameters: {"path": "/Users/you/Documents"}
 
 I found several files in your Documents folder:
@@ -385,16 +385,16 @@ You: Create a summary of my project files and save it to a new file
 
 Othello: I'll help you create a summary of your project files.
 
-🔧 Using tool: filesystem_list_directory
+Using tool: filesystem_list_directory
    Parameters: {"path": "./projects"}
 
-🔧 Using tool: filesystem_read_file
+Using tool: filesystem_read_file
    Parameters: {"path": "./projects/README.md"}
 
-🔧 Using tool: filesystem_read_file
+Using tool: filesystem_read_file
    Parameters: {"path": "./projects/TODO.md"}
 
-🔧 Using tool: filesystem_write_file
+Using tool: filesystem_write_file
    Parameters: {
      "path": "./project-summary.md",
      "content": "# Project Summary\n\n..."
@@ -431,10 +431,10 @@ You: /load conversation-id
 ```
 ┌─ Server Status ────────────────────────────────────────────┐
 │                                                            │
-│ ✅ filesystem      (5 tools)     [Connected]              │
-│ ✅ websearch       (3 tools)     [Connected]              │
-│ ⚠️  database       (8 tools)     [Reconnecting...]        │
-│ ❌ weather         (2 tools)     [Failed: timeout]        │
+│ [Success] filesystem      (5 tools)     [Connected]              │
+│ [Success] websearch       (3 tools)     [Connected]              │
+│ [Warning]  database       (8 tools)     [Reconnecting...]        │
+│ [Failed] weather         (2 tools)     [Failed: timeout]        │
 │                                                            │
 │ Total: 4 servers, 16 tools available                      │
 └────────────────────────────────────────────────────────────┘
@@ -530,7 +530,7 @@ You: Help me organize my Downloads folder
 
 Othello: I'll help you organize your Downloads folder. Let me first see what's there.
 
-🔧 Using tool: filesystem_list_directory
+Using tool: filesystem_list_directory
    Parameters: {"path": "/Users/you/Downloads"}
 
 I found 47 files in your Downloads folder. Here's what I can help organize:
@@ -560,21 +560,21 @@ You: Please create organized folders and move the files
 
 Othello: I'll create organized folders and move your files.
 
-🔧 Using tool: filesystem_create_directory
+Using tool: filesystem_create_directory
    Parameters: {"path": "/Users/you/Downloads/Documents"}
 
-🔧 Using tool: filesystem_create_directory
+Using tool: filesystem_create_directory
    Parameters: {"path": "/Users/you/Downloads/Images"}
 
-🔧 Using tool: filesystem_create_directory
+Using tool: filesystem_create_directory
    Parameters: {"path": "/Users/you/Downloads/Software"}
 
-🔧 Using tool: filesystem_move_file
+Using tool: filesystem_move_file
    Parameters: {"source": "/Users/you/Downloads/report.pdf", "destination": "/Users/you/Downloads/Documents/report.pdf"}
 
 [... continuing with all files ...]
 
-✅ Organization complete! I've:
+[Success] Organization complete! I've:
 - Created 4 organizational folders
 - Moved 47 files to appropriate categories
 - Left 3 recent files in the main Downloads folder
@@ -589,24 +589,24 @@ You: Research the latest developments in AI and create a summary report
 
 Othello: I'll research the latest AI developments and create a comprehensive summary report for you.
 
-🔧 Using tool: web_search
+Using tool: web_search
    Parameters: {"query": "latest AI developments 2025", "num_results": 10}
 
-🔧 Using tool: web_search
+Using tool: web_search
    Parameters: {"query": "artificial intelligence breakthroughs October 2025", "num_results": 10}
 
-🔧 Using tool: web_search
+Using tool: web_search
    Parameters: {"query": "machine learning research papers 2025", "num_results": 5}
 
 Based on my research, I'll now create a comprehensive summary report.
 
-🔧 Using tool: filesystem_write_file
+Using tool: filesystem_write_file
    Parameters: {
      "path": "./ai-developments-report-2025.md",
      "content": "# AI Developments Report - October 2025\n\n## Executive Summary\n\n..."
    }
 
-✅ Research complete! I've created a comprehensive AI developments report covering:
+[Success] Research complete! I've created a comprehensive AI developments report covering:
 
 **Key Topics Covered:**
 1. **Breakthrough Models**: Latest large language models and their capabilities
@@ -631,40 +631,40 @@ You: Help me set up a new Go project with proper structure and documentation
 
 Othello: I'll help you create a well-structured Go project with proper documentation and best practices.
 
-🔧 Using tool: filesystem_create_directory
+Using tool: filesystem_create_directory
    Parameters: {"path": "./my-go-project"}
 
-🔧 Using tool: filesystem_create_directory
+Using tool: filesystem_create_directory
    Parameters: {"path": "./my-go-project/cmd"}
 
-🔧 Using tool: filesystem_create_directory
+Using tool: filesystem_create_directory
    Parameters: {"path": "./my-go-project/internal"}
 
-🔧 Using tool: filesystem_create_directory
+Using tool: filesystem_create_directory
    Parameters: {"path": "./my-go-project/pkg"}
 
-🔧 Using tool: filesystem_create_directory
+Using tool: filesystem_create_directory
    Parameters: {"path": "./my-go-project/docs"}
 
-🔧 Using tool: filesystem_write_file
+Using tool: filesystem_write_file
    Parameters: {
      "path": "./my-go-project/go.mod",
      "content": "module my-go-project\n\ngo 1.21\n"
    }
 
-🔧 Using tool: filesystem_write_file
+Using tool: filesystem_write_file
    Parameters: {
      "path": "./my-go-project/README.md",
      "content": "# My Go Project\n\n## Description\n\n..."
    }
 
-🔧 Using tool: filesystem_write_file
+Using tool: filesystem_write_file
    Parameters: {
      "path": "./my-go-project/Makefile",
      "content": ".PHONY: build test clean\n\nbuild:\n\tgo build -o bin/ ./cmd/...\n\n..."
    }
 
-✅ Project setup complete! I've created:
+[Success] Project setup complete! I've created:
 
 **Directory Structure:**
 ```
@@ -680,12 +680,12 @@ my-go-project/
 ```
 
 **What's included:**
-- ✅ Standard Go project layout
-- ✅ Module initialization
-- ✅ Comprehensive README
-- ✅ Makefile with common tasks
-- ✅ Git ignore file
-- ✅ Basic documentation structure
+- [Success] Standard Go project layout
+- [Success] Module initialization
+- [Success] Comprehensive README
+- [Success] Makefile with common tasks
+- [Success] Git ignore file
+- [Success] Basic documentation structure
 
 Your project is ready for development! Would you like me to add any specific components like CI/CD configuration, Docker setup, or testing frameworks?
 ```
@@ -717,7 +717,7 @@ Press Ctrl+H for help
 
 ### Reporting Issues
 
-When reporting issues, please include:
+When reporting issues, include:
 
 1. **Version**: `othello --version`
 2. **OS and Architecture**: `uname -a`

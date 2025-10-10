@@ -4,12 +4,12 @@ A Go-based local AI assistant that integrates with Model Context Protocol (MCP) 
 
 ## Features
 
-- 🤖 **Local AI Models**: Integrates with Ollama for local language model execution
-- 🔧 **MCP Integration**: Seamless connection to Model Context Protocol servers
-- 💻 **Terminal UI**: Modern terminal user interface built with Bubbletea
-- ⚡ **CLI Commands**: Powerful command-line interface for automation
-- 🔐 **Local-First**: All data stays on your machine by default
-- 📝 **Conversation History**: Persistent chat history and tool execution logs
+- **Local AI Models**: Integrates with Ollama for local language model execution
+- **MCP Integration**: Seamless connection to Model Context Protocol servers
+- **Terminal UI**: Modern terminal user interface built with Bubbletea
+- **CLI Commands**: Powerful command-line interface for automation
+- **Local-First**: All data stays on your machine by default
+- **Conversation History**: Persistent chat history and tool execution logs
 
 ## Quick Start
 
@@ -36,11 +36,11 @@ go build -o othello ./cmd/othello
 
 Comprehensive documentation is available in the [`docs/`](./docs/) directory:
 
-- 📋 [Product Requirements](./docs/PRD.md)
-- 📝 [Technical Requirements](./docs/REQUIREMENTS.md)
-- 🏗️ [System Architecture](./docs/ARCHITECTURE.md)
-- 👤 [User Guide](./docs/USAGE.md)
-- ⚙️ [Implementation Guide](./docs/IMPLEMENTATION.md)
+- [Product Requirements](./docs/PRD.md)
+- [Technical Requirements](./docs/REQUIREMENTS.md)
+- [System Architecture](./docs/ARCHITECTURE.md)
+- [User Guide](./docs/USAGE.md)
+- [Implementation Guide](./docs/IMPLEMENTATION.md)
 
 ## Configuration
 
