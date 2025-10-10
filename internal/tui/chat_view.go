@@ -68,7 +68,7 @@ func NewChatView(styles Styles, keymap KeyMap, m model.Model) *ChatView {
 	// Add welcome message with command hints
 	welcomeMsg := ChatMessage{
 		Role:      "assistant",
-		Content:   "Welcome to Othello AI Agent! 🤖\n\nQuick commands:\n• /mcp - View MCP servers\n• /tools - Browse and execute tools\n• /help - Show detailed help\n\nOr just type naturally to chat!",
+		Content:   "Welcome to Othello AI Agent! 🤖\n\nQuick commands:\n• /mcp - View MCP servers\n• /tools - Browse and execute tools\n• /help - Show detailed help\n• /exit - Exit application\n\nOr just type naturally to chat!",
 		Timestamp: time.Now().Format("15:04:05"),
 	}
 	chatView.AddMessage(welcomeMsg)
@@ -272,11 +272,14 @@ func (v *ChatView) handleCommand(input string) tea.Cmd {
 		return func() tea.Msg {
 			return ViewSwitchMsg{ViewType: HistoryViewType}
 		}
+	case "/exit", "/quit":
+		// Exit the application
+		return tea.Quit
 	case "/chat":
 		// Stay in chat (no-op but show confirmation)
 		responseMsg := ChatMessage{
 			Role:      "assistant",
-			Content:   "Already in chat view. Available commands:\n• /mcp or /servers - MCP servers\n• /tools - Available tools\n• /help - Detailed help\n• /history - Conversation history",
+			Content:   "Already in chat view. Available commands:\n• /mcp or /servers - MCP servers\n• /tools - Available tools\n• /help - Detailed help\n• /history - Conversation history\n• /exit or /quit - Exit application",
 			Timestamp: time.Now().Format("15:04:05"),
 		}
 		v.AddMessage(responseMsg)

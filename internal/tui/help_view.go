@@ -62,6 +62,7 @@ func (v *HelpView) View() string {
   /help       Switch to help view
   /history    Switch to history view
   /chat       Stay in chat view
+  /exit       Exit the application
 
 🔧 Tool Execution:
   - Navigate to Tools view (press 3 or /tools)
