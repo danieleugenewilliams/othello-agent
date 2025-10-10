@@ -57,6 +57,11 @@ func NewConversationStore(dbPath string) (*ConversationStore, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 	
+	// Enable foreign key constraints
+	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		return nil, fmt.Errorf("enable foreign keys: %w", err)
+	}
+	
 	store := &ConversationStore{db: db}
 	if err := store.initSchema(); err != nil {
 		return nil, fmt.Errorf("initialize schema: %w", err)
@@ -365,6 +370,11 @@ func (s *ConversationStore) updateConversationStats(conversationID string) error
 	}
 	
 	return nil
+}
+
+// UpdateConversationStats is a public wrapper for updateConversationStats
+func (s *ConversationStore) UpdateConversationStats(conversationID string) error {
+	return s.updateConversationStats(conversationID)
 }
 
 // Close closes the database connection

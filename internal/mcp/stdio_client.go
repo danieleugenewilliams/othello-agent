@@ -21,7 +21,7 @@ type STDIOClient struct {
 	stdout     io.ReadCloser
 	stderr     io.ReadCloser
 	connected  int32 // atomic boolean
-	responses  map[interface{}]chan Message
+	responses  map[int64]chan Message
 	responsesMu sync.RWMutex
 	requestID  int64
 	logger     Logger
@@ -31,7 +31,7 @@ type STDIOClient struct {
 func NewSTDIOClient(server Server, logger Logger) *STDIOClient {
 	return &STDIOClient{
 		server:    server,
-		responses: make(map[interface{}]chan Message),
+		responses: make(map[int64]chan Message),
 		logger:    logger,
 	}
 }
@@ -132,7 +132,6 @@ func (c *STDIOClient) ListTools(ctx context.Context) ([]Tool, error) {
 	}
 	
 	msg := Message{
-		ID:     c.nextRequestID(),
 		Method: "tools/list",
 		Params: map[string]interface{}{},
 	}
@@ -164,7 +163,6 @@ func (c *STDIOClient) CallTool(ctx context.Context, name string, params map[stri
 	}
 	
 	msg := Message{
-		ID:     c.nextRequestID(),
 		Method: "tools/call",
 		Params: ToolCallParams{
 			Name:      name,
@@ -205,7 +203,6 @@ func (c *STDIOClient) GetInfo(ctx context.Context) (*ServerInfo, error) {
 	}
 	
 	msg := Message{
-		ID:     c.nextRequestID(),
 		Method: "ping",
 		Params: map[string]interface{}{},
 	}
@@ -233,7 +230,6 @@ func (c *STDIOClient) GetInfo(ctx context.Context) (*ServerInfo, error) {
 // initialize sends the initialize request
 func (c *STDIOClient) initialize(ctx context.Context) error {
 	msg := Message{
-		ID:     c.nextRequestID(),
 		Method: "initialize",
 		Params: map[string]interface{}{
 			"protocolVersion": "2024-11-05",
@@ -264,17 +260,21 @@ func (c *STDIOClient) initialize(ctx context.Context) error {
 
 // sendRequest sends a request and waits for a response
 func (c *STDIOClient) sendRequest(ctx context.Context, msg Message) (Message, error) {
+	// Ensure ID is int64
+	requestID := c.nextRequestID()
+	msg.ID = requestID
+	
 	// Create response channel
 	responseChan := make(chan Message, 1)
 	
 	c.responsesMu.Lock()
-	c.responses[msg.ID] = responseChan
+	c.responses[requestID] = responseChan
 	c.responsesMu.Unlock()
 	
 	// Clean up channel on exit
 	defer func() {
 		c.responsesMu.Lock()
-		delete(c.responses, msg.ID)
+		delete(c.responses, requestID)
 		c.responsesMu.Unlock()
 		close(responseChan)
 	}()
@@ -309,6 +309,11 @@ func (c *STDIOClient) sendRequest(ctx context.Context, msg Message) (Message, er
 // readResponses reads responses from the server
 func (c *STDIOClient) readResponses() {
 	scanner := bufio.NewScanner(c.stdout)
+	
+	// Increase buffer size for large responses
+	buf := make([]byte, 64*1024) // 64KB buffer
+	scanner.Buffer(buf, 1024*1024) // 1MB max token size
+	
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" {
@@ -323,13 +328,29 @@ func (c *STDIOClient) readResponses() {
 		
 		// Handle response
 		if msg.ID != nil {
+			// Convert ID to int64 for consistent comparison
+			var responseID int64
+			switch id := msg.ID.(type) {
+			case int64:
+				responseID = id
+			case float64:
+				responseID = int64(id)
+			case int:
+				responseID = int64(id)
+			default:
+				c.logger.Error("Unexpected ID type", "type", fmt.Sprintf("%T", id), "value", id)
+				continue
+			}
+			
 			c.responsesMu.RLock()
-			if ch, exists := c.responses[msg.ID]; exists {
+			if ch, exists := c.responses[responseID]; exists {
 				select {
 				case ch <- msg:
 				default:
-					c.logger.Error("Response channel full", "id", msg.ID)
+					c.logger.Error("Response channel full", "id", responseID)
 				}
+			} else {
+				c.logger.Debug("No waiting request for response", "id", responseID)
 			}
 			c.responsesMu.RUnlock()
 		} else {

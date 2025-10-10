@@ -13,6 +13,10 @@ Othello is a Go-based local AI assistant that integrates with Model Context Prot
 - SQLite-based conversation history
 - Configuration management with Viper
 
+## Environment
+- Macbook Pro M2
+- Never use `timeout`. Use `sleep` instead.
+
 ## Collaboration Guidelines
 - Never use emojis in communication, code, code comments, documentation, or commit messages.
 - I know I am right. You don't need to remind me.
