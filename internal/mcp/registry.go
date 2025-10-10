@@ -259,3 +259,31 @@ func (r *ToolRegistry) GetServerCount() int {
 	
 	return len(r.servers)
 }
+
+// GetAllTools returns all tools from all servers
+func (r *ToolRegistry) GetAllTools() []Tool {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	tools := make([]Tool, 0, len(r.tools))
+	for _, tool := range r.tools {
+		tools = append(tools, tool)
+	}
+
+	return tools
+}
+
+// GetToolsByServer returns all tools from a specific server
+func (r *ToolRegistry) GetToolsByServer(serverName string) []Tool {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	var tools []Tool
+	for _, tool := range r.tools {
+		if tool.ServerName == serverName {
+			tools = append(tools, tool)
+		}
+	}
+
+	return tools
+}

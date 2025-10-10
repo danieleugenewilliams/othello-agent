@@ -20,6 +20,35 @@ type ModelRequestMsg struct {
 	ID      string
 }
 
+// ServerStatusUpdateMsg represents a server status change notification
+type ServerStatusUpdateMsg struct {
+	ServerName string
+	Connected  bool
+	ToolCount  int
+	Error      string
+}
+
+// ToolUpdateMsg represents a tool availability change notification  
+type ToolUpdateMsg struct {
+	ServerName string
+	Tools      []Tool
+	Added      []string // names of newly added tools
+	Removed    []string // names of removed tools
+}
+
+// RefreshDataMsg signals views to refresh their data
+type RefreshDataMsg struct {
+	ViewType string // "servers", "tools", or "all"
+}
+
+// ToolExecutionMsg represents a tool execution notification
+type ToolExecutionMsg struct {
+	ToolName string
+	Success  bool
+	Result   interface{}
+	Error    string
+}
+
 // GenerateResponse sends a message to the model and returns a command
 func GenerateResponse(m model.Model, message, id string) tea.Cmd {
 	return func() tea.Msg {

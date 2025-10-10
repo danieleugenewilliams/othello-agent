@@ -90,7 +90,7 @@ func (c *STDIOClient) Connect(ctx context.Context) error {
 }
 
 // Disconnect closes the connection to the MCP server
-func (c *STDIOClient) Disconnect() error {
+func (c *STDIOClient) Disconnect(ctx context.Context) error {
 	if atomic.LoadInt32(&c.connected) == 0 {
 		return nil // Already disconnected
 	}
@@ -123,6 +123,11 @@ func (c *STDIOClient) Disconnect() error {
 // IsConnected returns true if the client is connected
 func (c *STDIOClient) IsConnected() bool {
 	return atomic.LoadInt32(&c.connected) == 1
+}
+
+// GetTransport returns the transport type for this client
+func (c *STDIOClient) GetTransport() string {
+	return "stdio"
 }
 
 // ListTools lists all available tools from the server

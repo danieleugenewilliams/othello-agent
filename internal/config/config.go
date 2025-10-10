@@ -46,6 +46,7 @@ type TUIConfig struct {
 // MCPConfig contains MCP server settings
 type MCPConfig struct {
 	Servers []ServerConfig `mapstructure:"servers" yaml:"servers"`
+	Timeout time.Duration  `mapstructure:"timeout" yaml:"timeout"`
 }
 
 // ServerConfig represents an MCP server configuration

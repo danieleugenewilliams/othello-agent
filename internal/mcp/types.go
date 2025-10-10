@@ -44,8 +44,9 @@ type Server struct {
 type Client interface {
 	// Connection management
 	Connect(ctx context.Context) error
-	Disconnect() error
+	Disconnect(ctx context.Context) error
 	IsConnected() bool
+	GetTransport() string
 
 	// Tool operations
 	ListTools(ctx context.Context) ([]Tool, error)

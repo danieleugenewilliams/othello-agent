@@ -7,14 +7,19 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/danieleugenewilliams/othello-agent/internal/config"
+	"github.com/danieleugenewilliams/othello-agent/internal/mcp"
 	"github.com/danieleugenewilliams/othello-agent/internal/model"
 	"github.com/danieleugenewilliams/othello-agent/internal/tui"
 )
 
 // Agent represents the core agent instance
 type Agent struct {
-	config *config.Config
-	logger *log.Logger
+	config       *config.Config
+	logger       *log.Logger
+	mcpRegistry  *mcp.ToolRegistry
+	mcpManager   *MCPManager
+	toolExecutor *mcp.ToolExecutor
+	updateChan   chan interface{} // Channel for broadcasting status updates
 }
 
 // Interface defines the agent's public API
@@ -23,6 +28,10 @@ type Interface interface {
 	Stop(ctx context.Context) error
 	StartTUI() error
 	GetStatus() *Status
+	GetMCPServers() []ServerInfo
+	GetMCPTools(ctx context.Context) ([]tui.Tool, error)
+	SubscribeToUpdates() <-chan interface{}
+	ExecuteTool(ctx context.Context, toolName string, params map[string]interface{}) (*tui.ToolExecutionResult, error)
 }
 
 // Status represents the current agent status
@@ -39,22 +48,64 @@ func New(cfg *config.Config) (*Agent, error) {
 		return nil, fmt.Errorf("configuration cannot be nil")
 	}
 
+	logger := log.New(log.Writer(), "[AGENT] ", log.LstdFlags)
+
+	// Initialize MCP registry with logger adapter
+	mcpLogger := &agentLogger{logger: logger}
+	mcpRegistry := mcp.NewToolRegistry(mcpLogger)
+
+	// Initialize MCP manager
+	mcpManager := NewMCPManager(mcpRegistry, mcpLogger)
+
+	// Initialize tool executor
+	toolExecutor := mcp.NewToolExecutor(mcpRegistry, mcpLogger)
+
 	agent := &Agent{
-		config: cfg,
-		logger: log.New(log.Writer(), "[AGENT] ", log.LstdFlags),
+		config:       cfg,
+		logger:       logger,
+		mcpRegistry:  mcpRegistry,
+		mcpManager:   mcpManager,
+		toolExecutor: toolExecutor,
+		updateChan:   make(chan interface{}, 100), // Buffered channel for updates
 	}
 
+	// Set up the callback for MCP status updates
+	mcpManager.SetUpdateCallback(agent.broadcastUpdate)
+
 	return agent, nil
+}
+
+// agentLogger adapts standard log.Logger to the MCP Logger interface
+type agentLogger struct {
+	logger *log.Logger
+}
+
+func (a *agentLogger) Info(msg string, args ...interface{}) {
+	a.logger.Printf("[INFO] "+msg, args...)
+}
+
+func (a *agentLogger) Error(msg string, args ...interface{}) {
+	a.logger.Printf("[ERROR] "+msg, args...)
+}
+
+func (a *agentLogger) Debug(msg string, args ...interface{}) {
+	a.logger.Printf("[DEBUG] "+msg, args...)
 }
 
 // Start starts the agent with the given context
 func (a *Agent) Start(ctx context.Context) error {
 	a.logger.Println("Starting Othello AI Agent")
 	
-	// TODO: Initialize model interface
-	// TODO: Initialize MCP client manager
-	// TODO: Initialize storage
-	// TODO: Start background services
+	// Initialize MCP servers from configuration
+	for _, serverCfg := range a.config.MCP.Servers {
+		a.logger.Printf("Connecting to MCP server: %s", serverCfg.Name)
+		if err := a.mcpManager.AddServer(ctx, serverCfg); err != nil {
+			a.logger.Printf("Failed to connect to MCP server %s: %v", serverCfg.Name, err)
+			// Continue with other servers even if one fails
+			continue
+		}
+		a.logger.Printf("Successfully connected to MCP server: %s", serverCfg.Name)
+	}
 	
 	a.logger.Printf("Agent started with model: %s", a.config.Model.Name)
 	return nil
@@ -64,9 +115,10 @@ func (a *Agent) Start(ctx context.Context) error {
 func (a *Agent) Stop(ctx context.Context) error {
 	a.logger.Println("Stopping Othello AI Agent")
 	
-	// TODO: Stop background services
-	// TODO: Close MCP connections
-	// TODO: Close storage connections
+	// Stop MCP connections
+	if err := a.mcpManager.Close(ctx); err != nil {
+		a.logger.Printf("Error stopping MCP connections: %v", err)
+	}
 	
 	a.logger.Println("Agent stopped")
 	return nil
@@ -103,5 +155,75 @@ func (a *Agent) GetStatus() *Status {
 		ConfigFile:     a.config.ConfigFile(),
 		ModelConnected: false, // TODO: Check actual model connection
 		MCPServers:     len(a.config.MCP.Servers),
+	}
+}
+
+// GetMCPServers returns information about all registered MCP servers
+func (a *Agent) GetMCPServers() []ServerInfo {
+	return a.mcpManager.ListServers()
+}
+
+// GetMCPTools returns all available tools from registered MCP servers
+func (a *Agent) GetMCPTools(ctx context.Context) ([]tui.Tool, error) {
+	mcpTools := a.mcpRegistry.ListTools()
+	
+	// Convert mcp.Tool to tui.Tool
+	tools := make([]tui.Tool, len(mcpTools))
+	for i, mcpTool := range mcpTools {
+		tools[i] = tui.Tool{
+			Name:        mcpTool.Name,
+			Description: mcpTool.Description,
+			Server:      mcpTool.ServerName,
+		}
+	}
+	
+	return tools, nil
+}
+
+// SubscribeToUpdates returns a channel for receiving status updates
+func (a *Agent) SubscribeToUpdates() <-chan interface{} {
+	return a.updateChan
+}
+
+// ExecuteTool executes an MCP tool with the given parameters
+func (a *Agent) ExecuteTool(ctx context.Context, toolName string, params map[string]interface{}) (*tui.ToolExecutionResult, error) {
+	a.logger.Printf("Executing tool: %s with params: %+v", toolName, params)
+	
+	// Execute the tool using the tool executor
+	result, err := a.toolExecutor.Execute(ctx, toolName, params)
+	if err != nil {
+		a.logger.Printf("Tool execution failed for %s: %v", toolName, err)
+		return &tui.ToolExecutionResult{
+			ToolName: toolName,
+			Success:  false,
+			Error:    err.Error(),
+		}, nil
+	}
+	
+	a.logger.Printf("Tool %s executed successfully", toolName)
+	
+	// Broadcast tool execution update
+	a.broadcastUpdate(tui.ToolExecutionMsg{
+		ToolName: toolName,
+		Success:  true,
+		Result:   result.Result,
+	})
+	
+	return &tui.ToolExecutionResult{
+		ToolName: toolName,
+		Success:  true,
+		Result:   result.Result,
+		Duration: result.Duration,
+	}, nil
+}
+
+// broadcastUpdate sends an update to all subscribers (non-blocking)
+func (a *Agent) broadcastUpdate(update interface{}) {
+	select {
+	case a.updateChan <- update:
+		// Update sent successfully
+	default:
+		// Channel is full, drop the update to avoid blocking
+		a.logger.Printf("Warning: Update channel full, dropping update")
 	}
 }

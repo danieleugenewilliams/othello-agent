@@ -2,6 +2,10 @@
 
 Welcome to the Othello AI Agent documentation. This directory contains comprehensive documentation for building, deploying, and using the Othello local AI assistant.
 
+## 📚 New Here? Start with the [Documentation Guide](./DOCUMENTATION_GUIDE.md)
+
+The [DOCUMENTATION_GUIDE.md](./DOCUMENTATION_GUIDE.md) explains which document to use for what purpose and how they all fit together. **Highly recommended for all team members!**
+
 ## Documentation Overview
 
 ### Core Documents
@@ -30,6 +34,25 @@ Welcome to the Othello AI Agent documentation. This directory contains comprehen
   - Phase-by-phase development plan
   - Code examples and patterns
   - Testing and deployment strategies
+
+- **[MCP_TUI_INTEGRATION.md](./MCP_TUI_INTEGRATION.md)** - MCP-TUI Integration Plan ⚡ **CURRENT FOCUS**
+  - Comprehensive overview of MCP integration
+  - Week-by-week implementation strategy
+  - Tool execution and display in TUI
+  - Core value proposition implementation
+
+- **[TDD_IMPLEMENTATION_PLAN.md](./TDD_IMPLEMENTATION_PLAN.md)** - Detailed TDD Plan 🧪 **ACTIVE**
+  - Day-by-day test-first implementation guide
+  - Complete test code with assertions
+  - Implementation code for each component
+  - Red-Green-Refactor workflow
+  - Acceptance criteria for each week
+
+- **[DOCUMENTATION_GUIDE.md](./DOCUMENTATION_GUIDE.md)** - Documentation Navigation Guide 📚
+  - Which document to use when
+  - Daily development workflow
+  - Quick reference by role
+  - Document relationships and purposes
 
 ## Quick Links
 
@@ -155,19 +178,26 @@ othello mcp add filesystem npx @modelcontextprotocol/server-filesystem /path/to/
 - [Complete] Simple TUI interface
 
 ### Phase 2: Core Features (Weeks 5-8)
-- [In Progress] Tool discovery and registry
-- [In Progress] Tool execution engine
+- [Complete] Tool discovery and registry
+- [Complete] Tool execution engine
 - [In Progress] Conversation management
-- [In Progress] Enhanced TUI with multiple views
+- [Complete] Enhanced TUI with multiple views
 
 ### Phase 3: Advanced Features (Weeks 9-12)
-- ⏳ HTTP transport for MCP
-- ⏳ Real-time notifications
-- ⏳ Multiple model backends
-- ⏳ Advanced storage and caching
+- [Complete] HTTP transport for MCP
+- [Complete] Real-time notifications
+- [Complete] Multiple model backends
+- [Complete] Advanced storage and caching
 
-### Phase 4: Polish (Weeks 13-16)
-- ⏳ Comprehensive testing
+### Phase 4: MCP-TUI Integration ⚡ **CURRENT** (Weeks 13-17)
+- [In Progress] Agent-MCP manager integration
+- ⏳ TUI displays real MCP data
+- ⏳ Tool execution from chat
+- ⏳ Model-tool awareness
+- ⏳ Real-time notifications in UI
+
+### Phase 5: Polish & Release (Weeks 18-20)
+- ⏳ Comprehensive integration testing
 - ⏳ Performance optimization
 - ⏳ Documentation and tutorials
 - ⏳ Beta release
@@ -198,11 +228,14 @@ Othello is released under the [MIT License](../LICENSE), making it free for both
 
 | Document | Status | Last Updated | Next Review |
 |----------|--------|--------------|-------------|
-| PRD.md | [Complete] Complete | 2025-10-10 | 2025-11-01 |
-| REQUIREMENTS.md | [Complete] Complete | 2025-10-10 | 2025-11-01 |
-| ARCHITECTURE.md | [Complete] Complete | 2025-10-10 | 2025-11-01 |
-| USAGE.md | [Complete] Complete | 2025-10-10 | 2025-11-01 |
-| IMPLEMENTATION.md | [Complete] Complete | 2025-10-10 | 2025-11-01 |
+| PRD.md | Complete | 2025-10-10 | 2025-11-01 |
+| REQUIREMENTS.md | Complete | 2025-10-10 | 2025-11-01 |
+| ARCHITECTURE.md | Complete | 2025-10-10 | 2025-11-01 |
+| USAGE.md | Complete | 2025-10-10 | 2025-11-01 |
+| IMPLEMENTATION.md | Complete | 2025-10-10 | 2025-11-01 |
+| MCP_TUI_INTEGRATION.md | ⚡ Active | 2025-10-10 | Weekly |
+| TDD_IMPLEMENTATION_PLAN.md | 🧪 Active | 2025-10-10 | Daily |
+| DOCUMENTATION_GUIDE.md | 📚 Complete | 2025-10-10 | As needed |
 
 ## Feedback
 

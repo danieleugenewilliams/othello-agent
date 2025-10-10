@@ -56,7 +56,7 @@ func (c *HTTPClient) Connect(ctx context.Context) error {
 }
 
 // Disconnect closes the connection to the MCP server
-func (c *HTTPClient) Disconnect() error {
+func (c *HTTPClient) Disconnect(ctx context.Context) error {
 	if atomic.LoadInt32(&c.connected) == 0 {
 		return nil // Already disconnected
 	}
@@ -90,6 +90,11 @@ func (c *HTTPClient) Disconnect() error {
 // IsConnected returns true if the client is connected
 func (c *HTTPClient) IsConnected() bool {
 	return atomic.LoadInt32(&c.connected) == 1
+}
+
+// GetTransport returns the transport type for this client
+func (c *HTTPClient) GetTransport() string {
+	return "http"
 }
 
 // ListTools lists all available tools from the server

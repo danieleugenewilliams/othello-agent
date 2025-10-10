@@ -1,12 +1,47 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+// AgentInterface defines what the TUI needs from the Agent
+type AgentInterface interface {
+	GetMCPServers() []ServerInfo
+	GetMCPTools(ctx context.Context) ([]Tool, error)
+	SubscribeToUpdates() <-chan interface{} // Channel for receiving status updates
+	ExecuteTool(ctx context.Context, toolName string, params map[string]interface{}) (*ToolExecutionResult, error)
+}
+
+// ServerInfo represents MCP server information
+type ServerInfo struct {
+	Name      string
+	Status    string
+	Connected bool
+	ToolCount int
+	Transport string
+	Error     string
+}
+
+// Tool represents an MCP tool
+type Tool struct {
+	Name        string
+	Description string
+	Server      string
+}
+
+// ToolExecutionResult represents the result of executing an MCP tool
+type ToolExecutionResult struct {
+	ToolName   string
+	Success    bool
+	Result     interface{}
+	Error      string
+	Duration   string
+}
 
 // ServerItem represents a server in the list
 type ServerItem struct {
@@ -43,15 +78,28 @@ type ServerView struct {
 	keymap  KeyMap
 	list    list.Model
 	servers []ServerItem
+	agent   AgentInterface // Optional agent for real data
 }
 
-// NewServerView creates a new server view
+// NewServerView creates a new server view with mock data (backward compatibility)
 func NewServerView(styles Styles, keymap KeyMap) *ServerView {
-	// Create some mock servers for now
-	servers := []ServerItem{
-		{name: "filesystem", status: "connected", toolCount: 8, connected: true},
-		{name: "web-search", status: "disconnected", toolCount: 5, connected: false},
-		{name: "calculator", status: "connected", toolCount: 3, connected: true},
+	return NewServerViewWithAgent(styles, keymap, nil)
+}
+
+// NewServerViewWithAgent creates a new server view with real agent data
+func NewServerViewWithAgent(styles Styles, keymap KeyMap, agent AgentInterface) *ServerView {
+	var servers []ServerItem
+	
+	if agent != nil {
+		// Use real data from agent
+		servers = getServerItemsFromAgent(agent)
+	} else {
+		// Create some mock servers for backward compatibility
+		servers = []ServerItem{
+			{name: "filesystem", status: "connected", toolCount: 8, connected: true},
+			{name: "web-search", status: "disconnected", toolCount: 5, connected: false},
+			{name: "calculator", status: "connected", toolCount: 3, connected: true},
+		}
 	}
 	
 	items := make([]list.Item, len(servers))
@@ -70,7 +118,29 @@ func NewServerView(styles Styles, keymap KeyMap) *ServerView {
 		keymap:  keymap,
 		list:    l,
 		servers: servers,
+		agent:   agent,
 	}
+}
+
+// getServerItemsFromAgent converts agent server info to ServerItem list
+func getServerItemsFromAgent(agent AgentInterface) []ServerItem {
+	if agent == nil {
+		return []ServerItem{}
+	}
+	
+	serverInfos := agent.GetMCPServers()
+	items := make([]ServerItem, len(serverInfos))
+	
+	for i, info := range serverInfos {
+		items[i] = ServerItem{
+			name:      info.Name,
+			status:    info.Status,
+			toolCount: info.ToolCount,
+			connected: info.Connected,
+		}
+	}
+	
+	return items
 }
 
 // Init initializes the server view
@@ -83,6 +153,16 @@ func (v *ServerView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	
 	switch msg := msg.(type) {
+	case ServerStatusUpdateMsg:
+		// Handle server status update
+		v.handleServerStatusUpdate(msg)
+		return v, nil
+	case RefreshDataMsg:
+		// Handle refresh request
+		if msg.ViewType == "servers" || msg.ViewType == "all" {
+			v.RefreshServers()
+		}
+		return v, nil
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "enter":
@@ -95,8 +175,8 @@ func (v *ServerView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return v, nil
 		case "r":
-			// Refresh servers
-			// TODO: Implement server refresh
+			// Refresh servers from agent
+			v.RefreshServers()
 			return v, nil
 		case "a":
 			// Add new server
@@ -219,4 +299,56 @@ func (v *ServerView) GetSelectedServer() *ServerItem {
 // GetServers returns all servers
 func (v *ServerView) GetServers() []ServerItem {
 	return v.servers
+}
+
+// RefreshServers refreshes the server list from the agent
+func (v *ServerView) RefreshServers() {
+	if v.agent == nil {
+		return // No agent, keep mock data
+	}
+	
+	// Get fresh data from agent
+	v.servers = getServerItemsFromAgent(v.agent)
+	
+	// Update the list
+	items := make([]list.Item, len(v.servers))
+	for i, server := range v.servers {
+		items[i] = server
+	}
+	v.list.SetItems(items)
+}
+
+// GetServerItems returns server items for testing
+func (v *ServerView) GetServerItems() []ServerItem {
+	return v.servers
+}
+
+// handleServerStatusUpdate processes server status update messages
+func (v *ServerView) handleServerStatusUpdate(msg ServerStatusUpdateMsg) {
+	// Find and update the server in our list
+	for i, server := range v.servers {
+		if server.name == msg.ServerName {
+			// Update the server status
+			v.servers[i].connected = msg.Connected
+			v.servers[i].toolCount = msg.ToolCount
+			if msg.Connected {
+				v.servers[i].status = "connected"
+			} else {
+				v.servers[i].status = "disconnected"
+			}
+			
+			// Update the list items
+			items := make([]list.Item, len(v.servers))
+			for j, s := range v.servers {
+				items[j] = s
+			}
+			v.list.SetItems(items)
+			return
+		}
+	}
+	
+	// Server not found, it might be a new server - refresh from agent
+	if v.agent != nil {
+		v.RefreshServers()
+	}
 }
