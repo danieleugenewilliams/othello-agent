@@ -27,6 +27,7 @@ const (
 // KeyMap defines the keybindings for the application
 type KeyMap struct {
 	Quit       key.Binding
+	Back       key.Binding
 	Submit     key.Binding
 	SwitchView key.Binding
 	ServerView key.Binding
@@ -41,8 +42,12 @@ type KeyMap struct {
 func DefaultKeyMap() KeyMap {
 	return KeyMap{
 		Quit: key.NewBinding(
-			key.WithKeys("ctrl+c", "esc"),
-			key.WithHelp("ctrl+c/esc", "quit"),
+			key.WithKeys("ctrl+c"),
+			key.WithHelp("ctrl+c", "quit"),
+		),
+		Back: key.NewBinding(
+			key.WithKeys("esc"),
+			key.WithHelp("esc", "back"),
 		),
 		Submit: key.NewBinding(
 			key.WithKeys("enter"),
@@ -87,7 +92,7 @@ func (k KeyMap) ShortHelp() []key.Binding {
 // FullHelp returns keybindings for the expanded help view
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Submit, k.SwitchView, k.ClearInput},
+		{k.Submit, k.SwitchView, k.ClearInput, k.Back},
 		{k.ChatView, k.ServerView, k.ToolView, k.HelpView, k.HistoryView},
 		{k.Quit},
 	}
@@ -313,6 +318,15 @@ func (a *Application) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, a.keymap.Quit):
 			a.quitting = true
 			return a, tea.Quit
+			
+		case key.Matches(msg, a.keymap.Back):
+			// ESC key - navigate back to chat view from any other view
+			if a.currentView != ChatViewType {
+				a.currentView = ChatViewType
+				return a, nil
+			}
+			// If already in chat view, ESC does nothing (don't exit)
+			return a, nil
 			
 		case key.Matches(msg, a.keymap.SwitchView):
 			a.nextView()

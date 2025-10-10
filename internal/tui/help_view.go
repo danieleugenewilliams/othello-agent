@@ -71,12 +71,14 @@ func (v *HelpView) View() string {
   - Results appear in Chat view
 
 🖥️  Navigation:
-  1  Chat view (default)
-  2  MCP servers status
-  3  Available tools
-  4  Help (this view) 
-  5  Conversation history
-  Tab  Cycle through views`)
+  1    Chat view (default)
+  2    MCP servers status
+  3    Available tools
+  4    Help (this view) 
+  5    Conversation history
+  Tab  Cycle through views
+  Esc  Back to chat view
+  Ctrl+C  Exit application`)
 	
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
