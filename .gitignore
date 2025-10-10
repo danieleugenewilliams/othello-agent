@@ -4,6 +4,8 @@
 *.dll
 *.so
 *.dylib
+othello
+othello.exe
 
 # Test binary, built with `go test -c`
 *.test
