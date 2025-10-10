@@ -54,11 +54,36 @@ func (v *HelpView) View() string {
 	// Help content
 	helpContent := v.help.FullHelpView(v.keymap.FullHelp())
 	
+	// Command help
+	commandHelp := v.styles.Base.Render(`
+📝 Chat Commands:
+  /mcp        Switch to MCP servers view
+  /tools      Switch to tools view  
+  /help       Switch to help view
+  /history    Switch to history view
+  /chat       Stay in chat view
+
+🔧 Tool Execution:
+  - Navigate to Tools view (press 3 or /tools)
+  - Use arrow keys to select a tool
+  - Press Enter to execute
+  - Results appear in Chat view
+
+🖥️  Navigation:
+  1  Chat view (default)
+  2  MCP servers status
+  3  Available tools
+  4  Help (this view) 
+  5  Conversation history
+  Tab  Cycle through views`)
+	
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		header,
 		"",
 		helpContent,
+		"",
+		commandHelp,
 		"",
 		v.styles.DimmedStyle.Render("Othello AI Agent - Local AI assistant with MCP tool integration"),
 	)

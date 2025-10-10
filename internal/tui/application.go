@@ -53,24 +53,24 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("tab", "switch view"),
 		),
 		ServerView: key.NewBinding(
-			key.WithKeys("F2"),
-			key.WithHelp("F2", "servers"),
+			key.WithKeys("2"),
+			key.WithHelp("2", "servers"),
 		),
 		ToolView: key.NewBinding(
-			key.WithKeys("F3"),
-			key.WithHelp("F3", "tools"),
+			key.WithKeys("3"),
+			key.WithHelp("3", "tools"),
 		),
 		HelpView: key.NewBinding(
-			key.WithKeys("F4"),
-			key.WithHelp("F4", "help"),
+			key.WithKeys("4"),
+			key.WithHelp("4", "help"),
 		),
 		HistoryView: key.NewBinding(
-			key.WithKeys("ctrl+r"),
-			key.WithHelp("ctrl+r", "history"),
+			key.WithKeys("5"),
+			key.WithHelp("5", "history"),
 		),
 		ChatView: key.NewBinding(
-			key.WithKeys("ctrl+c"),
-			key.WithHelp("ctrl+c", "chat"),
+			key.WithKeys("1"),
+			key.WithHelp("1", "chat"),
 		),
 		ClearInput: key.NewBinding(
 			key.WithKeys("ctrl+l"),
@@ -263,6 +263,11 @@ func (a *Application) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.helpView.SetSize(msg.Width, msg.Height-3)
 		a.historyView.SetSize(msg.Width, msg.Height-3)
 		
+		return a, nil
+
+	case ViewSwitchMsg:
+		// Handle view switching from commands
+		a.currentView = msg.ViewType
 		return a, nil
 
 	case ToolExecutionMsg:

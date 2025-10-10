@@ -49,6 +49,17 @@ type ToolExecutionMsg struct {
 	Error    string
 }
 
+// CommandMsg represents a command execution request
+type CommandMsg struct {
+	Command string
+	Args    []string
+}
+
+// ViewSwitchMsg requests switching to a specific view
+type ViewSwitchMsg struct {
+	ViewType ViewType
+}
+
 // GenerateResponse sends a message to the model and returns a command
 func GenerateResponse(m model.Model, message, id string) tea.Cmd {
 	return func() tea.Msg {

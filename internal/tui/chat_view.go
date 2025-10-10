@@ -54,7 +54,7 @@ func NewChatView(styles Styles, keymap KeyMap, m model.Model) *ChatView {
 	vp := viewport.New(0, 0)
 	vp.SetContent("")
 
-	return &ChatView{
+	chatView := &ChatView{
 		styles:   styles,
 		keymap:   keymap,
 		viewport: vp,
@@ -64,6 +64,16 @@ func NewChatView(styles Styles, keymap KeyMap, m model.Model) *ChatView {
 		model:    m,
 		waitingForResponse: false,
 	}
+	
+	// Add welcome message with command hints
+	welcomeMsg := ChatMessage{
+		Role:      "assistant",
+		Content:   "Welcome to Othello AI Agent! 🤖\n\nQuick commands:\n• /mcp - View MCP servers\n• /tools - Browse and execute tools\n• /help - Show detailed help\n\nOr just type naturally to chat!",
+		Timestamp: time.Now().Format("15:04:05"),
+	}
+	chatView.AddMessage(welcomeMsg)
+	
+	return chatView
 }
 
 // Init initializes the chat view
@@ -110,13 +120,22 @@ func (v *ChatView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		
 		switch msg.String() {
 		case "enter":
-			if v.input.Value() != "" {
-				// Add user message
-				userInput := v.input.Value()
+			if v.focused {
+				userInput := strings.TrimSpace(v.input.Value())
+				if userInput == "" {
+					return v, nil
+				}
+
+				// Check if it's a command (starts with /)
+				if strings.HasPrefix(userInput, "/") {
+					return v, v.handleCommand(userInput)
+				}
+
+				// Regular chat message
 				userMsg := ChatMessage{
 					Role:      "user",
 					Content:   userInput,
-					Timestamp: time.Now().Format("15:04"),
+					Timestamp: time.Now().Format("15:04:05"),
 				}
 				v.AddMessage(userMsg)
 				
@@ -207,6 +226,80 @@ func (v *ChatView) ClearMessages() {
 // GetInput returns the current input value
 func (v *ChatView) GetInput() string {
 	return v.input.Value()
+}
+
+// handleCommand processes chat commands that start with /
+func (v *ChatView) handleCommand(input string) tea.Cmd {
+	// Clear input immediately
+	v.input.SetValue("")
+	
+	// Parse command and arguments
+	parts := strings.Fields(input)
+	if len(parts) == 0 {
+		return nil
+	}
+	
+	command := strings.ToLower(parts[0])
+	// args := parts[1:] // Reserved for future use with command arguments
+	
+	// Add command to chat history
+	commandMsg := ChatMessage{
+		Role:      "user",
+		Content:   input,
+		Timestamp: time.Now().Format("15:04:05"),
+	}
+	v.AddMessage(commandMsg)
+	
+	// Process different commands
+	switch command {
+	case "/mcp", "/servers":
+		// Show MCP servers
+		return func() tea.Msg {
+			return ViewSwitchMsg{ViewType: ServerViewType}
+		}
+	case "/tools":
+		// Show tools
+		return func() tea.Msg {
+			return ViewSwitchMsg{ViewType: ToolViewType}
+		}
+	case "/help":
+		// Show help
+		return func() tea.Msg {
+			return ViewSwitchMsg{ViewType: HelpViewType}
+		}
+	case "/history":
+		// Show history
+		return func() tea.Msg {
+			return ViewSwitchMsg{ViewType: HistoryViewType}
+		}
+	case "/chat":
+		// Stay in chat (no-op but show confirmation)
+		responseMsg := ChatMessage{
+			Role:      "assistant",
+			Content:   "Already in chat view. Available commands:\n• /mcp or /servers - MCP servers\n• /tools - Available tools\n• /help - Detailed help\n• /history - Conversation history",
+			Timestamp: time.Now().Format("15:04:05"),
+		}
+		v.AddMessage(responseMsg)
+		return nil
+	case "/commands":
+		// List all commands
+		responseMsg := ChatMessage{
+			Role:      "assistant",
+			Content:   "Available commands:\n• /mcp, /servers - Switch to MCP servers view\n• /tools - Switch to tools view\n• /help - Switch to help view\n• /history - Switch to history view\n• /chat - Stay in chat view\n• /commands - Show this list\n\nTip: You can also use number keys 1-5 to switch views!",
+			Timestamp: time.Now().Format("15:04:05"),
+		}
+		v.AddMessage(responseMsg)
+		return nil
+	default:
+		// Unknown command
+		responseMsg := ChatMessage{
+			Role:      "assistant",
+			Content:   fmt.Sprintf("Unknown command: %s\nType /commands to see all available commands.", command),
+			Timestamp: time.Now().Format("15:04:05"),
+		}
+		v.AddMessage(responseMsg)
+		return nil
+	}
 }
 
 // SetInput sets the input value
