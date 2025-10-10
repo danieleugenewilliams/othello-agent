@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"log"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/danieleugenewilliams/othello-agent/internal/config"
+	"github.com/danieleugenewilliams/othello-agent/internal/model"
+	"github.com/danieleugenewilliams/othello-agent/internal/tui"
 )
 
 // Agent represents the core agent instance
@@ -73,11 +76,22 @@ func (a *Agent) Stop(ctx context.Context) error {
 func (a *Agent) StartTUI() error {
 	a.logger.Println("Starting TUI mode")
 	
-	// TODO: Initialize TUI
-	// For now, just show a placeholder message
-	fmt.Println("TUI mode not yet implemented")
-	fmt.Printf("Model: %s\n", a.config.Model.Name)
-	fmt.Printf("Ollama Host: %s\n", a.config.Ollama.Host)
+	// Create the model instance
+	m := model.NewOllamaModel(a.config.Ollama.Host, a.config.Model.Name)
+	
+	// Create and start the TUI application
+	app := tui.NewApplication(m)
+	
+	// Run the TUI
+	program := tea.NewProgram(
+		app,
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+	)
+	
+	if _, err := program.Run(); err != nil {
+		return fmt.Errorf("failed to run TUI: %w", err)
+	}
 	
 	return nil
 }

@@ -20,6 +20,13 @@ Othello is a Go-based local AI assistant that integrates with Model Context Prot
 
 ## Architecture Principles
 
+### Test-Driven Development
+- Write tests before implementing features
+- Use table-driven tests for various scenarios
+- Mock external dependencies for unit tests
+- Ensure high code coverage (>80%)
+- Mark tasks as done only when tests pass
+
 ### Code Organization
 - Follow Go standard project layout
 - Use dependency injection with interfaces
