@@ -8,7 +8,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/danieleugenewilliams/othello-agent/internal/config"
 	"github.com/danieleugenewilliams/othello-agent/internal/mcp"
-	"github.com/danieleugenewilliams/othello-agent/internal/model"
 	"github.com/danieleugenewilliams/othello-agent/internal/tui"
 )
 
@@ -128,11 +127,10 @@ func (a *Agent) Stop(ctx context.Context) error {
 func (a *Agent) StartTUI() error {
 	a.logger.Println("Starting TUI mode")
 	
-	// Create the model instance
-	m := model.NewOllamaModel(a.config.Ollama.Host, a.config.Model.Name)
-	
-	// Create and start the TUI application
-	app := tui.NewApplication(m)
+	// Create TUI application with agent integration
+	keymap := tui.DefaultKeyMap()
+	styles := tui.DefaultStyles()
+	app := tui.NewApplicationWithAgent(keymap, styles, a)
 	
 	// Run the TUI
 	program := tea.NewProgram(
@@ -159,8 +157,23 @@ func (a *Agent) GetStatus() *Status {
 }
 
 // GetMCPServers returns information about all registered MCP servers
-func (a *Agent) GetMCPServers() []ServerInfo {
-	return a.mcpManager.ListServers()
+func (a *Agent) GetMCPServers() []tui.ServerInfo {
+	mcpServers := a.mcpManager.ListServers()
+	
+	// Convert agent.ServerInfo to tui.ServerInfo
+	servers := make([]tui.ServerInfo, len(mcpServers))
+	for i, mcpServer := range mcpServers {
+		servers[i] = tui.ServerInfo{
+			Name:      mcpServer.Name,
+			Status:    mcpServer.Status,
+			Connected: mcpServer.Connected,
+			ToolCount: mcpServer.ToolCount,
+			Transport: mcpServer.Transport,
+			Error:     mcpServer.Error,
+		}
+	}
+	
+	return servers
 }
 
 // GetMCPTools returns all available tools from registered MCP servers

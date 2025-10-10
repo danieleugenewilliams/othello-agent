@@ -206,14 +206,18 @@ func NewApplication(m model.Model) *Application {
 
 // NewApplicationWithAgent creates a new TUI application with agent support
 func NewApplicationWithAgent(keymap KeyMap, styles Styles, agent AgentInterface) *Application {
+	// Create a model for the ChatView (we can use a dummy model or create one from agent config)
+	// For now, create a basic Ollama model instance
+	m := model.NewOllamaModel("http://localhost:11434", "qwen2.5:3b")
+	
 	app := &Application{
 		currentView: ChatViewType,
 		keymap:      keymap,
 		styles:      styles,
 		help:        help.New(),
-		model:       nil, // No model needed when we have agent
+		model:       m,
 		agent:       agent,
-		chatView:    nil, // TODO: Update ChatView to work with agent
+		chatView:    NewChatView(styles, keymap, m),
 		serverView:  NewServerViewWithAgent(styles, keymap, agent),
 		toolView:    NewToolViewWithAgent(agent),
 		helpView:    NewHelpView(styles, keymap),
