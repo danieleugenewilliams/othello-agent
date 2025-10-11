@@ -187,7 +187,15 @@ func (tv *ToolView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				tv.updateTable()
 				return tv, nil
 			} else {
-				// Execute selected tool
+				// For now, just return to chat view when Enter is pressed
+				// Tool execution should be moved to a separate key binding (like 'x' or 'e')
+				return tv, func() tea.Msg {
+					return ViewSwitchMsg{ViewType: ChatViewType}
+				}
+			}
+		case "x":
+			if !tv.filterMode {
+				// Execute selected tool with 'x' key
 				return tv, tv.executeSelectedTool()
 			}
 		case "r":
@@ -232,7 +240,7 @@ func (tv *ToolView) View() string {
 		s.WriteString(tv.filter.View())
 		s.WriteString("\n\n")
 	} else {
-		s.WriteString("Press '/' to filter, 'r' to refresh, 'enter' to execute, 'q' to quit\n\n")
+		s.WriteString("Press '/' to filter, 'r' to refresh, 'x' to execute, 'enter' to go back, 'q' to quit\n\n")
 	}
 
 	s.WriteString(tv.table.View())
