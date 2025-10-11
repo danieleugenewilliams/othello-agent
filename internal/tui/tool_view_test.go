@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/danieleugenewilliams/othello-agent/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -36,6 +37,11 @@ func (m *MockAgentForTools) SubscribeToUpdates() <-chan interface{} {
 func (m *MockAgentForTools) ExecuteTool(ctx context.Context, toolName string, params map[string]interface{}) (*ToolExecutionResult, error) {
 	args := m.Called(ctx, toolName, params)
 	return args.Get(0).(*ToolExecutionResult), args.Error(1)
+}
+
+func (m *MockAgentForTools) GetMCPToolsAsDefinitions(ctx context.Context) ([]model.ToolDefinition, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]model.ToolDefinition), args.Error(1)
 }
 
 func TestToolView_NewToolView(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/danieleugenewilliams/othello-agent/internal/mcp"
 	"github.com/danieleugenewilliams/othello-agent/internal/model"
 )
 
@@ -71,6 +72,19 @@ type ToolCallDetectedMsg struct {
 type ToolExecutionResultMsg struct {
 	RequestID string
 	Results   []string
+}
+
+// MCPToolExecutingMsg represents a tool execution starting
+type MCPToolExecutingMsg struct {
+	ToolName string
+	Params   map[string]interface{}
+}
+
+// MCPToolExecutedMsg represents a tool execution completion
+type MCPToolExecutedMsg struct {
+	ToolName string
+	Result   *mcp.ExecuteResult
+	Error    error
 }
 
 // GenerateResponse sends a message to the model and returns a command

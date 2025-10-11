@@ -83,7 +83,7 @@ func TestSTDIOClient_ConnectWithLocalMemory(t *testing.T) {
 	
 	// Clean up
 	defer func() {
-		disconnectErr := client.Disconnect()
+		disconnectErr := client.Disconnect(ctx)
 		assert.NoError(t, disconnectErr)
 	}()
 	

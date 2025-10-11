@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/danieleugenewilliams/othello-agent/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -36,6 +37,11 @@ func (m *MockAgent) SubscribeToUpdates() <-chan interface{} {
 func (m *MockAgent) ExecuteTool(ctx context.Context, toolName string, params map[string]interface{}) (*ToolExecutionResult, error) {
 	args := m.Called(ctx, toolName, params)
 	return args.Get(0).(*ToolExecutionResult), args.Error(1)
+}
+
+func (m *MockAgent) GetMCPToolsAsDefinitions(ctx context.Context) ([]model.ToolDefinition, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]model.ToolDefinition), args.Error(1)
 }
 
 // TestServerView_WithRealMCPData tests that ServerView displays real MCP server data

@@ -33,7 +33,7 @@ func TestMCPToolExecution(t *testing.T) {
 	}
 	
 	defer func() {
-		disconnectErr := client.Disconnect()
+		disconnectErr := client.Disconnect(ctx)
 		assert.NoError(t, disconnectErr)
 	}()
 	

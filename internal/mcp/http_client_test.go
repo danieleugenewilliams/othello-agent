@@ -412,12 +412,12 @@ func TestHTTPClientDisconnect(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, client.IsConnected())
 	
-	err = client.Disconnect()
+	err = client.Disconnect(ctx)
 	assert.NoError(t, err)
 	assert.False(t, client.IsConnected())
 	
 	// Test double disconnect (should be safe)
-	err = client.Disconnect()
+	err = client.Disconnect(ctx)
 	assert.NoError(t, err)
 }
 

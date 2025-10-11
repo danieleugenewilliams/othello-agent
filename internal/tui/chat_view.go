@@ -150,22 +150,61 @@ func (v *ChatView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ToolExecutionResultMsg:
 		// Handle tool execution results
 		if msg.RequestID == v.requestID {
-			// Format results in a conversational way
-			var content string
-			if len(msg.Results) == 1 {
-				// Single tool result
-				content = msg.Results[0]
+			// Instead of just showing "tool completed", we need to feed the results 
+			// back to the LLM to generate a proper response
+			return v, v.generateFollowUpResponse(msg.Results, msg.RequestID)
+		}
+		return v, nil
+	
+	case MCPToolExecutingMsg:
+		// Add a message indicating tool execution has started
+		executingMsg := ChatMessage{
+			Role:      "tool",
+			Content:   fmt.Sprintf("Executing tool: %s...", msg.ToolName),
+			Timestamp: time.Now().Format("15:04:05"),
+		}
+		v.AddMessage(executingMsg)
+		return v, nil
+	
+	case MCPToolExecutedMsg:
+		// Handle tool execution completion
+		if msg.Error != nil {
+			// Go error occurred during execution
+			errorMsg := ChatMessage{
+				Role:      "tool",
+				Content:   fmt.Sprintf("Tool execution failed: %s", msg.Error.Error()),
+				Timestamp: time.Now().Format("15:04:05"),
+				Error:     msg.Error.Error(),
+			}
+			v.AddMessage(errorMsg)
+		} else if msg.Result != nil && msg.Result.Result != nil && msg.Result.Result.IsError {
+			// MCP-level error
+			errorText := "Unknown MCP error"
+			if len(msg.Result.Result.Content) > 0 {
+				errorText = msg.Result.Result.Content[0].Text
+			}
+			errorMsg := ChatMessage{
+				Role:      "tool",
+				Content:   fmt.Sprintf("Tool error: %s", errorText),
+				Timestamp: time.Now().Format("15:04:05"),
+				Error:     errorText,
+			}
+			v.AddMessage(errorMsg)
+		} else if msg.Result != nil && msg.Result.Result != nil {
+			// Success - extract text from result content
+			var resultText string
+			if len(msg.Result.Result.Content) > 0 {
+				resultText = msg.Result.Result.Content[0].Text
 			} else {
-				// Multiple tool results
-				content = "Here's what I accomplished:\n\n" + strings.Join(msg.Results, "\n")
+				resultText = "Tool completed successfully"
 			}
 			
-			resultMsg := ChatMessage{
-				Role:      "assistant", 
-				Content:   content,
-				Timestamp: time.Now().Format("15:04"),
+			successMsg := ChatMessage{
+				Role:      "tool",
+				Content:   fmt.Sprintf("Tool result from %s:\n%s", msg.ToolName, resultText),
+				Timestamp: time.Now().Format("15:04:05"),
 			}
-			v.AddMessage(resultMsg)
+			v.AddMessage(successMsg)
 		}
 		return v, nil
 		
@@ -557,8 +596,9 @@ func (v *ChatView) executeToolCalls(toolCalls []model.ToolCall, requestID string
 				if err != nil {
 					results = append(results, fmt.Sprintf("❌ **%s** failed: %v", toolCall.Name, err))
 				} else if result.Success {
-					formattedResult := v.formatToolResult(toolCall.Name, result.Result)
-					results = append(results, fmt.Sprintf("✅ **%s**: %s", toolCall.Name, formattedResult))
+					// Capture the ACTUAL result instead of just "success"
+					resultText := fmt.Sprintf("✅ **%s**: %v", toolCall.Name, result.Result)
+					results = append(results, resultText)
 				} else {
 					results = append(results, fmt.Sprintf("❌ **%s**: %s", toolCall.Name, result.Error))
 				}
@@ -652,6 +692,41 @@ func (v *ChatView) formatGenericResult(result interface{}) string {
 		return "Operation completed successfully"
 	}
 	return "Tool executed successfully"
+}
+
+// generateFollowUpResponse generates an LLM response based on tool results
+func (v *ChatView) generateFollowUpResponse(toolResults []string, requestID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		
+		// Create a prompt that includes the tool results
+		resultsText := strings.Join(toolResults, "\n")
+		
+		// Ask the LLM to analyze and present the tool results
+		followUpPrompt := fmt.Sprintf(`Based on the tool execution results below, provide a helpful response to the user:
+
+Tool Results:
+%s
+
+Please analyze these results and provide a clear, helpful response to the user about what was found or accomplished.`, resultsText)
+
+		// Generate response with the tool results as context
+		messages := []model.Message{
+			{Role: "system", Content: "You are a helpful AI assistant. Analyze the tool results and provide a clear response to the user."},
+			{Role: "user", Content: followUpPrompt},
+		}
+		
+		response, err := v.model.Chat(ctx, messages, model.GenerateOptions{
+			Temperature: 0.7,
+			MaxTokens:   1024,
+		})
+		
+		return ModelResponseMsg{
+			Response: response,
+			Error:    err,
+			ID:       requestID,
+		}
+	}
 }
 
 // Focus sets focus to the input

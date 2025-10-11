@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/danieleugenewilliams/othello-agent/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -78,17 +79,17 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestDefaultClientFactory(t *testing.T) {
-	factory := &DefaultClientFactory{}
 	logger := NewSimpleLogger()
+	factory := NewClientFactory(logger)
 
-	server := Server{
+	serverCfg := config.ServerConfig{
 		Name:      "test-factory",
 		Transport: "stdio",
-		Command:   []string{"echo"},
-		Timeout:   time.Second * 30,
+		Command:   "echo",
+		Args:      []string{},
 	}
 
-	client, err := factory.CreateClient(server, logger)
+	client, err := factory.CreateClient(serverCfg)
 	require.NoError(t, err)
 	require.NotNil(t, client)
 
@@ -98,17 +99,16 @@ func TestDefaultClientFactory(t *testing.T) {
 }
 
 func TestClientFactoryWithHTTP(t *testing.T) {
-	factory := &DefaultClientFactory{}
 	logger := NewSimpleLogger()
+	factory := NewClientFactory(logger)
 
-	server := Server{
+	serverCfg := config.ServerConfig{
 		Name:      "test-http-factory",
 		Transport: "http",
-		URL:       "http://localhost:8080/mcp",
-		Timeout:   time.Second * 30,
+		Command:   "http://localhost:8080/mcp", // For HTTP, the command might be the URL
 	}
 
-	client, err := factory.CreateClient(server, logger)
+	client, err := factory.CreateClient(serverCfg)
 	require.NoError(t, err)
 	require.NotNil(t, client)
 
