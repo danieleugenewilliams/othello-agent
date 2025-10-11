@@ -193,13 +193,14 @@ func (tv *ToolView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return tv, textinput.Blink
 		case "esc":
 			if tv.filterMode {
+				// Exit filter mode
 				tv.filterMode = false
 				tv.filter.Blur()
 				tv.filter.SetValue("")
 				tv.updateTable()
 				return tv, nil
-			} else if tv.selectedServer != "" {
-				// Go back to server view when viewing server-specific tools
+			} else {
+				// Always go back to server view
 				tv.selectedServer = ""
 				return tv, func() tea.Msg {
 					return ViewSwitchMsg{ViewType: ServerViewType}
@@ -207,17 +208,14 @@ func (tv *ToolView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			if tv.filterMode {
+				// Exit filter mode when in filter
 				tv.filterMode = false
 				tv.filter.Blur()
 				tv.updateTable()
 				return tv, nil
-			} else {
-				// For now, just return to chat view when Enter is pressed
-				// Tool execution should be moved to a separate key binding (like 'x' or 'e')
-				return tv, func() tea.Msg {
-					return ViewSwitchMsg{ViewType: ChatViewType}
-				}
 			}
+			// Otherwise, do nothing - tool execution will come from model in Week 4
+			return tv, nil
 		case "x":
 			if !tv.filterMode {
 				// Execute selected tool with 'x' key

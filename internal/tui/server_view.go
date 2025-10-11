@@ -180,6 +180,11 @@ func (v *ServerView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return v, nil
+		case "esc":
+			// Go back to chat view
+			return v, func() tea.Msg {
+				return ViewSwitchMsg{ViewType: ChatViewType}
+			}
 		case "r":
 			// Refresh servers from agent
 			v.RefreshServers()
