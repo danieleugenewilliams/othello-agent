@@ -133,24 +133,34 @@ func TestChatView_StoresToolMessages(t *testing.T)
 
 ---
 
-### Task 3: Manual Tool Execution Command
+### Task 3: Hierarchical MCP/Tools Navigation ⏭️ REVISED
 
-**Test File:** `internal/tui/chat_view_test.go`
+**Goal:** Make /tools view accessible from /mcp server view, not standalone
 
-**Test Case:**
-```go
-func TestChatView_ManualToolExecution(t *testing.T) {
-    // GIVEN: A chat view with agent
-    // WHEN: User types `/tool stats stats_type=session`
-    // THEN: Execute tool and display result
-}
-```
+**User Feedback:** 
+> "The /tools view should be under the /mcp view. When I use /mcp to view the list of MCP servers, if I click on that MCP server, I should see the /tools view (list of tools for that server)."
 
-**Steps:**
-1. Write test for slash command parsing (RED)
-2. Implement `/tool` command handler
-3. Connect to agent.ExecuteTool()
-4. Run test → GREEN
+**Implementation Plan:**
+
+1. **ServerView Enhancement**
+   - Add server selection functionality (Enter key or click)
+   - Send ServerSelectedMsg when server is selected
+   - Navigate to ToolView with selected server context
+
+2. **ToolView Enhancement**
+   - Accept selected server from navigation
+   - Filter tools to show only those from selected server
+   - Add breadcrumb showing "MCP > {server-name} > Tools"
+   - Add back navigation (Esc returns to ServerView)
+
+3. **Application Coordination**
+   - Handle ServerSelectedMsg to switch views
+   - Pass server context to ToolView
+   - Maintain navigation state
+
+4. **Remove Manual Tool Execution**
+   - Tool execution will come through model (Week 4)
+   - No need for `/tool` command implementation
 
 ---
 

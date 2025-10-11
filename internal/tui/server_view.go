@@ -168,11 +168,15 @@ func (v *ServerView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "enter":
-			// Toggle server connection
+			// Select server to view its tools
 			if selected := v.list.SelectedItem(); selected != nil {
 				if server, ok := selected.(ServerItem); ok {
-					// TODO: Implement server connection toggle
-					_ = server
+					// Send ServerSelectedMsg to navigate to tools view for this server
+					return v, func() tea.Msg {
+						return ServerSelectedMsg{
+							ServerName: server.name,
+						}
+					}
 				}
 			}
 			return v, nil

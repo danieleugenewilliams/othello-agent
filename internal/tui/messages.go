@@ -87,6 +87,11 @@ type MCPToolExecutedMsg struct {
 	Error    error
 }
 
+// ServerSelectedMsg represents a server being selected in the ServerView
+type ServerSelectedMsg struct {
+	ServerName string
+}
+
 // GenerateResponse sends a message to the model and returns a command
 func GenerateResponse(m model.Model, message, id string) tea.Cmd {
 	return func() tea.Msg {

@@ -274,6 +274,14 @@ func (a *Application) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle view switching from commands
 		a.currentView = msg.ViewType
 		return a, nil
+	
+	case ServerSelectedMsg:
+		// Handle server selection from ServerView - navigate to ToolView for that server
+		if a.toolView != nil {
+			a.toolView.SetSelectedServer(msg.ServerName)
+		}
+		a.currentView = ToolViewType
+		return a, nil
 
 	case ToolExecutionMsg:
 		// Handle tool execution results - display in chat view

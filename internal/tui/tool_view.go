@@ -13,13 +13,14 @@ import (
 
 // ToolView represents the tools display view
 type ToolView struct {
-	table       table.Model
-	filter      textinput.Model
-	tools       []Tool
-	agent       AgentInterface
-	width       int
-	height      int
-	filterMode  bool
+	table          table.Model
+	filter         textinput.Model
+	tools          []Tool
+	agent          AgentInterface
+	width          int
+	height         int
+	filterMode     bool
+	selectedServer string // Filter tools by this server when set
 }
 
 // NewToolView creates a new tool view with mock data (backward compatibility)
@@ -114,16 +115,34 @@ func (tv *ToolView) refreshTools() {
 	tv.updateTable()
 }
 
+// SetSelectedServer sets the server filter and refreshes the tool list
+func (tv *ToolView) SetSelectedServer(serverName string) {
+	tv.selectedServer = serverName
+	tv.refreshTools() // Refresh to ensure we have latest tools
+	tv.updateTable()
+}
+
 // updateTable updates the table with current tools data
 func (tv *ToolView) updateTable() {
 	filterText := strings.ToLower(tv.filter.Value())
 	var filteredTools []Tool
 
-	// Apply filter if any
-	if filterText == "" {
-		filteredTools = tv.tools
-	} else {
+	// First filter by selected server if set
+	serverFilteredTools := tv.tools
+	if tv.selectedServer != "" {
+		serverFilteredTools = []Tool{}
 		for _, tool := range tv.tools {
+			if tool.Server == tv.selectedServer {
+				serverFilteredTools = append(serverFilteredTools, tool)
+			}
+		}
+	}
+
+	// Then apply text filter if any
+	if filterText == "" {
+		filteredTools = serverFilteredTools
+	} else {
+		for _, tool := range serverFilteredTools {
 			if strings.Contains(strings.ToLower(tool.Name), filterText) ||
 				strings.Contains(strings.ToLower(tool.Description), filterText) ||
 				strings.Contains(strings.ToLower(tool.Server), filterText) {
@@ -179,6 +198,12 @@ func (tv *ToolView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				tv.filter.SetValue("")
 				tv.updateTable()
 				return tv, nil
+			} else if tv.selectedServer != "" {
+				// Go back to server view when viewing server-specific tools
+				tv.selectedServer = ""
+				return tv, func() tea.Msg {
+					return ViewSwitchMsg{ViewType: ServerViewType}
+				}
 			}
 		case "enter":
 			if tv.filterMode {
@@ -229,18 +254,37 @@ func (tv *ToolView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (tv *ToolView) View() string {
 	var s strings.Builder
 
-	s.WriteString(lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("99")).
-		Render("MCP Tools"))
-	s.WriteString("\n\n")
+	// Show breadcrumb if viewing tools for a specific server
+	if tv.selectedServer != "" {
+		s.WriteString(lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")).
+			Render("MCP > "))
+		s.WriteString(lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("99")).
+			Render(tv.selectedServer))
+		s.WriteString(lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")).
+			Render(" > Tools"))
+		s.WriteString("\n\n")
+	} else {
+		s.WriteString(lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("99")).
+			Render("MCP Tools"))
+		s.WriteString("\n\n")
+	}
 
 	if tv.filterMode {
 		s.WriteString("Filter: ")
 		s.WriteString(tv.filter.View())
 		s.WriteString("\n\n")
 	} else {
-		s.WriteString("Press '/' to filter, 'r' to refresh, 'x' to execute, 'enter' to go back, 'q' to quit\n\n")
+		if tv.selectedServer != "" {
+			s.WriteString("Press '/' to filter, 'r' to refresh, 'esc' to go back to servers, 'q' to quit\n\n")
+		} else {
+			s.WriteString("Press '/' to filter, 'r' to refresh, 'x' to execute, 'enter' to go back, 'q' to quit\n\n")
+		}
 	}
 
 	s.WriteString(tv.table.View())
