@@ -1,10 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/danieleugenewilliams/othello-agent/internal/agent"
 	"github.com/danieleugenewilliams/othello-agent/internal/config"
@@ -90,7 +90,7 @@ var mcpCmd = &cobra.Command{
 var mcpAddCmd = &cobra.Command{
 	Use:   "add <name> <command> [args...]",
 	Short: "Add a new MCP server",
-	Long: `Add a new MCP server to the configuration.
+	Long: `Add a new MCP server to mcp.json configuration.
 
 Examples:
   # Add filesystem server
@@ -103,47 +103,27 @@ Examples:
   othello mcp add custom /usr/bin/python3 -m myserver --port 8080`,
 	Args: cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.Load()
-		if err != nil {
-			return fmt.Errorf("failed to load configuration: %w", err)
-		}
-
 		name := args[0]
 		command := args[1]
 		serverArgs := args[2:]
 
-		// Get flags
-		transport, _ := cmd.Flags().GetString("transport")
-		timeout, _ := cmd.Flags().GetString("timeout")
+		// Get environment variables flag
 		envVars, _ := cmd.Flags().GetStringToString("env")
 
-		// Parse timeout
-		var timeoutDuration time.Duration
-		if timeout != "" {
-			timeoutDuration, err = time.ParseDuration(timeout)
-			if err != nil {
-				return fmt.Errorf("invalid timeout format: %w", err)
-			}
+		server := config.MCPServerConfig{
+			Command: command,
+			Args:    serverArgs,
+			Env:     envVars,
 		}
 
-		server := config.ServerConfig{
-			Name:      name,
-			Command:   command,
-			Args:      serverArgs,
-			Env:       envVars,
-			Transport: transport,
-			Timeout:   timeoutDuration,
-		}
-
-		if err := cfg.AddMCPServer(server); err != nil {
+		if err := config.AddMCPServer(name, server); err != nil {
 			return fmt.Errorf("failed to add MCP server: %w", err)
 		}
 
-		fmt.Printf("✅ Successfully added MCP server '%s'\n", name)
+		fmt.Printf("✅ Successfully added MCP server '%s' to mcp.json\n", name)
 		fmt.Printf("   Command: %s %s\n", command, strings.Join(serverArgs, " "))
-		fmt.Printf("   Transport: %s\n", transport)
-		if timeout != "" {
-			fmt.Printf("   Timeout: %s\n", timeout)
+		if len(envVars) > 0 {
+			fmt.Printf("   Environment variables: %d\n", len(envVars))
 		}
 		
 		return nil
@@ -153,21 +133,16 @@ Examples:
 var mcpRemoveCmd = &cobra.Command{
 	Use:   "remove <name>",
 	Short: "Remove an MCP server",
-	Long:  "Remove an MCP server from the configuration by name.",
+	Long:  "Remove an MCP server from mcp.json configuration by name.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.Load()
-		if err != nil {
-			return fmt.Errorf("failed to load configuration: %w", err)
-		}
-
 		name := args[0]
 
-		if err := cfg.RemoveMCPServer(name); err != nil {
+		if err := config.RemoveMCPServer(name); err != nil {
 			return fmt.Errorf("failed to remove MCP server: %w", err)
 		}
 
-		fmt.Printf("✅ Successfully removed MCP server '%s'\n", name)
+		fmt.Printf("✅ Successfully removed MCP server '%s' from mcp.json\n", name)
 		return nil
 	},
 }
@@ -175,44 +150,41 @@ var mcpRemoveCmd = &cobra.Command{
 var mcpListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all configured MCP servers",
-	Long:  "Display all configured MCP servers with their details.",
+	Long:  "Display all configured MCP servers from mcp.json with their details.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.Load()
+		servers, err := config.ListMCPServers()
 		if err != nil {
-			return fmt.Errorf("failed to load configuration: %w", err)
+			return fmt.Errorf("failed to list MCP servers: %w", err)
 		}
-
-		servers := cfg.ListMCPServers()
 		
 		if len(servers) == 0 {
 			fmt.Println("No MCP servers configured.")
 			fmt.Println("\nTo add a server, use:")
 			fmt.Println("  othello mcp add <name> <command> [args...]")
+			fmt.Println("\nConfiguration will be stored in ~/.othello/mcp.json")
 			return nil
 		}
 
-		fmt.Printf("Configured MCP Servers (%d):\n\n", len(servers))
+		fmt.Printf("Configured MCP Servers (%d) in ~/.othello/mcp.json:\n\n", len(servers))
 		
-		for i, server := range servers {
-			fmt.Printf("%d. %s\n", i+1, server.Name)
+		i := 1
+		for name, server := range servers {
+			fmt.Printf("%d. %s\n", i, name)
 			fmt.Printf("   Command: %s", server.Command)
 			if len(server.Args) > 0 {
 				fmt.Printf(" %s", strings.Join(server.Args, " "))
 			}
 			fmt.Printf("\n")
-			fmt.Printf("   Transport: %s\n", server.Transport)
-			if server.Timeout > 0 {
-				fmt.Printf("   Timeout: %s\n", server.Timeout)
-			}
 			if len(server.Env) > 0 {
 				fmt.Printf("   Environment:\n")
 				for k, v := range server.Env {
 					fmt.Printf("     %s=%s\n", k, v)
 				}
 			}
-			if i < len(servers)-1 {
+			if i < len(servers) {
 				fmt.Println()
 			}
+			i++
 		}
 		
 		return nil
@@ -222,31 +194,27 @@ var mcpListCmd = &cobra.Command{
 var mcpShowCmd = &cobra.Command{
 	Use:   "show <name>",
 	Short: "Show details of a specific MCP server",
-	Long:  "Display detailed information about a specific MCP server configuration.",
+	Long:  "Display detailed information about a specific MCP server configuration from mcp.json.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.Load()
-		if err != nil {
-			return fmt.Errorf("failed to load configuration: %w", err)
-		}
-
 		name := args[0]
-		server, err := cfg.GetMCPServer(name)
+		
+		servers, err := config.ListMCPServers()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to load MCP servers: %w", err)
 		}
 
-		fmt.Printf("MCP Server: %s\n\n", server.Name)
+		server, exists := servers[name]
+		if !exists {
+			return fmt.Errorf("server with name '%s' not found", name)
+		}
+
+		fmt.Printf("MCP Server: %s\n\n", name)
 		fmt.Printf("Command: %s", server.Command)
 		if len(server.Args) > 0 {
 			fmt.Printf(" %s", strings.Join(server.Args, " "))
 		}
 		fmt.Printf("\n")
-		fmt.Printf("Transport: %s\n", server.Transport)
-		
-		if server.Timeout > 0 {
-			fmt.Printf("Timeout: %s\n", server.Timeout)
-		}
 		
 		if len(server.Env) > 0 {
 			fmt.Printf("Environment Variables:\n")
@@ -254,6 +222,8 @@ var mcpShowCmd = &cobra.Command{
 				fmt.Printf("  %s=%s\n", k, v)
 			}
 		}
+		
+		fmt.Printf("\nConfiguration file: ~/.othello/mcp.json\n")
 		
 		return nil
 	},
@@ -272,9 +242,7 @@ func init() {
 	mcpCmd.AddCommand(mcpListCmd)
 	mcpCmd.AddCommand(mcpShowCmd)
 	
-	// Add flags for mcp add command
-	mcpAddCmd.Flags().StringP("transport", "t", "stdio", "Transport type (stdio or http)")
-	mcpAddCmd.Flags().String("timeout", "", "Timeout duration (e.g., 30s, 1m)")
+	// Add flags for mcp add command (simplified for standard MCP format)
 	mcpAddCmd.Flags().StringToStringP("env", "e", nil, "Environment variables (key=value)")
 }
 
@@ -297,6 +265,12 @@ func runInteractive(cmd *cobra.Command, args []string) error {
 	agentInstance, err := agent.New(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to create agent: %w", err)
+	}
+
+	// Start agent (initialize MCP connections)
+	ctx := context.Background()
+	if err := agentInstance.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start agent: %w", err)
 	}
 
 	// Start TUI mode

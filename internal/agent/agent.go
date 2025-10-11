@@ -95,8 +95,18 @@ func (a *agentLogger) Debug(msg string, args ...interface{}) {
 func (a *Agent) Start(ctx context.Context) error {
 	a.logger.Println("Starting Othello AI Agent")
 	
-	// Initialize MCP servers from configuration
-	for _, serverCfg := range a.config.MCP.Servers {
+	// Load MCP servers from standard mcp.json or fallback to config.yaml
+	mcpConfig, err := config.LoadMCPConfig()
+	if err != nil {
+		a.logger.Printf("Failed to load MCP config: %v", err)
+		return fmt.Errorf("failed to load MCP config: %w", err)
+	}
+	
+	// Convert MCP standard format to internal ServerConfig format
+	servers := config.ConvertMCPToServerConfigs(mcpConfig)
+	
+	// Initialize MCP servers
+	for _, serverCfg := range servers {
 		a.logger.Printf("Connecting to MCP server: %s", serverCfg.Name)
 		if err := a.mcpManager.AddServer(ctx, serverCfg); err != nil {
 			a.logger.Printf("Failed to connect to MCP server %s: %v", serverCfg.Name, err)
