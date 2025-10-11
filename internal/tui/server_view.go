@@ -7,12 +7,14 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/danieleugenewilliams/othello-agent/internal/model"
 )
 
 // AgentInterface defines what the TUI needs from the Agent
 type AgentInterface interface {
 	GetMCPServers() []ServerInfo
 	GetMCPTools(ctx context.Context) ([]Tool, error)
+	GetMCPToolsAsDefinitions(ctx context.Context) ([]model.ToolDefinition, error)
 	SubscribeToUpdates() <-chan interface{} // Channel for receiving status updates
 	ExecuteTool(ctx context.Context, toolName string, params map[string]interface{}) (*ToolExecutionResult, error)
 }

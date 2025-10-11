@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/danieleugenewilliams/othello-agent/internal/config"
 	"github.com/danieleugenewilliams/othello-agent/internal/mcp"
+	"github.com/danieleugenewilliams/othello-agent/internal/model"
 	"github.com/danieleugenewilliams/othello-agent/internal/tui"
 )
 
@@ -201,6 +202,33 @@ func (a *Agent) GetMCPTools(ctx context.Context) ([]tui.Tool, error) {
 	}
 	
 	return tools, nil
+}
+
+// GetMCPToolsAsDefinitions converts MCP tools to model.ToolDefinition format
+func (a *Agent) GetMCPToolsAsDefinitions(ctx context.Context) ([]model.ToolDefinition, error) {
+	mcpTools := a.mcpRegistry.ListTools()
+	
+	// Convert mcp.Tool to model.ToolDefinition
+	definitions := make([]model.ToolDefinition, len(mcpTools))
+	for i, mcpTool := range mcpTools {
+		// Create basic parameters structure
+		parameters := map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{},
+			"required": []string{},
+		}
+		
+		// TODO: In a more sophisticated implementation, we would parse
+		// the actual MCP tool schema to create proper parameters
+		
+		definitions[i] = model.ToolDefinition{
+			Name:        mcpTool.Name,
+			Description: mcpTool.Description,
+			Parameters:  parameters,
+		}
+	}
+	
+	return definitions, nil
 }
 
 // SubscribeToUpdates returns a channel for receiving status updates

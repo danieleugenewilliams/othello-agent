@@ -200,7 +200,7 @@ func NewApplication(m model.Model) *Application {
 		help:        help.New(),
 		model:       m,
 		agent:       nil, // No agent, use mock data
-		chatView:    NewChatView(styles, keymap, m),
+		chatView:    NewChatViewWithAgent(styles, keymap, m, nil),
 		serverView:  NewServerView(styles, keymap),
 		helpView:    NewHelpView(styles, keymap),
 		historyView: NewHistoryView(styles, keymap),
@@ -222,7 +222,7 @@ func NewApplicationWithAgent(keymap KeyMap, styles Styles, agent AgentInterface)
 		help:        help.New(),
 		model:       m,
 		agent:       agent,
-		chatView:    NewChatView(styles, keymap, m),
+		chatView:    NewChatViewWithAgent(styles, keymap, m, agent),
 		serverView:  NewServerViewWithAgent(styles, keymap, agent),
 		toolView:    NewToolViewWithAgent(agent),
 		helpView:    NewHelpView(styles, keymap),

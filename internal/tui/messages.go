@@ -60,12 +60,48 @@ type ViewSwitchMsg struct {
 	ViewType ViewType
 }
 
+// ToolCallDetectedMsg represents when the model wants to call tools
+type ToolCallDetectedMsg struct {
+	ToolCalls []model.ToolCall
+	RequestID string
+	Response  *model.Response
+}
+
+// ToolExecutionResultMsg represents the result of executing tools
+type ToolExecutionResultMsg struct {
+	RequestID string
+	Results   []string
+}
+
 // GenerateResponse sends a message to the model and returns a command
 func GenerateResponse(m model.Model, message, id string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		
 		response, err := m.Generate(ctx, message, model.GenerateOptions{
+			Temperature: 0.7,
+			MaxTokens:   2048,
+		})
+		
+		return ModelResponseMsg{
+			Response: response,
+			Error:    err,
+			ID:       id,
+		}
+	}
+}
+
+// GenerateResponseWithTools sends a message to the model with tool support
+func GenerateResponseWithTools(m model.Model, message string, tools []model.ToolDefinition, id string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		
+		// Create conversation with user message
+		messages := []model.Message{
+			{Role: "user", Content: message},
+		}
+		
+		response, err := m.ChatWithTools(ctx, messages, tools, model.GenerateOptions{
 			Temperature: 0.7,
 			MaxTokens:   2048,
 		})

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -14,6 +15,7 @@ import (
 type Model interface {
 	Generate(ctx context.Context, prompt string, options GenerateOptions) (*Response, error)
 	Chat(ctx context.Context, messages []Message, options GenerateOptions) (*Response, error)
+	ChatWithTools(ctx context.Context, messages []Message, tools []ToolDefinition, options GenerateOptions) (*Response, error)
 	IsAvailable(ctx context.Context) bool
 }
 
@@ -21,6 +23,19 @@ type Model interface {
 type Message struct {
 	Role    string `json:"role"`    // "user", "assistant", "system"
 	Content string `json:"content"`
+}
+
+// ToolDefinition represents a tool that can be called by the model
+type ToolDefinition struct {
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	Parameters  map[string]interface{} `json:"parameters"`
+}
+
+// ToolCall represents a tool call request from the model
+type ToolCall struct {
+	Name      string                 `json:"name"`
+	Arguments map[string]interface{} `json:"arguments"`
 }
 
 // GenerateOptions contains options for generation
@@ -34,6 +49,7 @@ type GenerateOptions struct {
 // Response represents a model response
 type Response struct {
 	Content      string        `json:"content"`
+	ToolCalls    []ToolCall    `json:"tool_calls,omitempty"`
 	FinishReason string        `json:"finish_reason,omitempty"`
 	Usage        Usage         `json:"usage,omitempty"`
 	Duration     time.Duration `json:"duration,omitempty"`
@@ -154,6 +170,96 @@ func (m *OllamaModel) Chat(ctx context.Context, messages []Message, options Gene
 			TotalTokens: len(ollamaResponse.Message.Content) / 4, // Rough estimate
 		},
 	}, nil
+}
+
+// ChatWithTools performs a chat completion with tool calling capabilities
+func (m *OllamaModel) ChatWithTools(ctx context.Context, messages []Message, tools []ToolDefinition, options GenerateOptions) (*Response, error) {
+	// For now, we'll implement tool calling by including tool descriptions in the system prompt
+	// and parsing the response for tool calls. This is a simplified approach that works with
+	// models that don't have native tool calling support.
+	
+	// Create system message with tool descriptions
+	toolPrompt := m.createToolPrompt(tools)
+	
+	// Add system message with tool instructions
+	enhancedMessages := []Message{
+		{Role: "system", Content: toolPrompt},
+	}
+	enhancedMessages = append(enhancedMessages, messages...)
+	
+	// Use regular chat endpoint
+	response, err := m.Chat(ctx, enhancedMessages, options)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Parse response for tool calls
+	toolCalls := m.parseToolCalls(response.Content)
+	response.ToolCalls = toolCalls
+	
+	return response, nil
+}
+
+// createToolPrompt creates a system prompt that describes available tools
+func (m *OllamaModel) createToolPrompt(tools []ToolDefinition) string {
+	if len(tools) == 0 {
+		return "You are a helpful AI assistant."
+	}
+	
+	prompt := `You are a helpful AI assistant with access to tools. When you need to use a tool, respond with a tool call in this exact format:
+
+TOOL_CALL: tool_name
+ARGUMENTS: {"param1": "value1", "param2": "value2"}
+
+Available tools:
+`
+	
+	for _, tool := range tools {
+		prompt += fmt.Sprintf("\n- %s: %s", tool.Name, tool.Description)
+		if tool.Parameters != nil {
+			prompt += fmt.Sprintf("\n  Parameters: %v", tool.Parameters)
+		}
+	}
+	
+	prompt += "\n\nOnly use tools when necessary to answer the user's question. If you don't need a tool, respond normally."
+	
+	return prompt
+}
+
+// parseToolCalls extracts tool calls from the model response
+func (m *OllamaModel) parseToolCalls(content string) []ToolCall {
+	var toolCalls []ToolCall
+	
+	lines := strings.Split(content, "\n")
+	var currentToolCall *ToolCall
+	
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		
+		if strings.HasPrefix(line, "TOOL_CALL:") {
+			if currentToolCall != nil {
+				toolCalls = append(toolCalls, *currentToolCall)
+			}
+			toolName := strings.TrimSpace(strings.TrimPrefix(line, "TOOL_CALL:"))
+			currentToolCall = &ToolCall{
+				Name:      toolName,
+				Arguments: make(map[string]interface{}),
+			}
+		} else if strings.HasPrefix(line, "ARGUMENTS:") && currentToolCall != nil {
+			argsJson := strings.TrimSpace(strings.TrimPrefix(line, "ARGUMENTS:"))
+			var args map[string]interface{}
+			if err := json.Unmarshal([]byte(argsJson), &args); err == nil {
+				currentToolCall.Arguments = args
+			}
+		}
+	}
+	
+	// Add the last tool call if exists
+	if currentToolCall != nil {
+		toolCalls = append(toolCalls, *currentToolCall)
+	}
+	
+	return toolCalls
 }
 
 // IsAvailable checks if the model is available

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -39,12 +40,18 @@ type ChatView struct {
 	messages []ChatMessage
 	focused  bool
 	model    model.Model
+	agent    AgentInterface // Add agent for tool access
 	waitingForResponse bool
 	requestID string
 }
 
 // NewChatView creates a new chat view
 func NewChatView(styles Styles, keymap KeyMap, m model.Model) *ChatView {
+	return NewChatViewWithAgent(styles, keymap, m, nil)
+}
+
+// NewChatViewWithAgent creates a new chat view with agent support
+func NewChatViewWithAgent(styles Styles, keymap KeyMap, m model.Model, agent AgentInterface) *ChatView {
 	input := textinput.New()
 	input.Placeholder = "Type a message..."
 	input.Focus()
@@ -59,16 +66,15 @@ func NewChatView(styles Styles, keymap KeyMap, m model.Model) *ChatView {
 		keymap:   keymap,
 		viewport: vp,
 		input:    input,
-		messages: []ChatMessage{},
-		focused:  true,
 		model:    m,
-		waitingForResponse: false,
+		agent:    agent,
+		focused:  true,
 	}
 	
 	// Add welcome message with command hints
 	welcomeMsg := ChatMessage{
 		Role:      "assistant",
-		Content:   "Welcome to Othello AI Agent! 🤖\n\nQuick commands:\n• /mcp - View MCP servers\n• /tools - Browse and execute tools\n• /help - Show detailed help\n• /exit - Exit application\n\nOr just type naturally to chat!",
+		Content:   "Welcome to Othello AI Agent! 🤖\n\nQuick commands:\n• /mcp - View MCP servers\n• /tools - Browse and execute tools\n• /help - Show detailed help\n• /exit - Exit application\n\nTips:\n• Use mouse to select text for copying\n• Ctrl+C to copy selected text to clipboard\n\nOr just type naturally to chat!",
 		Timestamp: time.Now().Format("15:04:05"),
 	}
 	chatView.AddMessage(welcomeMsg)
@@ -112,6 +118,57 @@ func (v *ChatView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return v, nil
 		
+	case ToolCallDetectedMsg:
+		// Handle tool call detection
+		if msg.RequestID == v.requestID {
+			v.waitingForResponse = false
+			
+			// Add a more natural assistant message
+			var toolCallContent string
+			if len(msg.ToolCalls) == 1 {
+				toolCallContent = fmt.Sprintf("Let me help you with that using the %s tool...", msg.ToolCalls[0].Name)
+			} else {
+				toolNames := make([]string, len(msg.ToolCalls))
+				for i, tc := range msg.ToolCalls {
+					toolNames[i] = tc.Name
+				}
+				toolCallContent = fmt.Sprintf("I'll use several tools to help: %s", strings.Join(toolNames, ", "))
+			}
+				
+			assistantMsg := ChatMessage{
+				Role:      "assistant",
+				Content:   toolCallContent,
+				Timestamp: time.Now().Format("15:04"),
+			}
+			v.AddMessage(assistantMsg)
+			
+			// Execute the tools
+			return v, v.executeToolCalls(msg.ToolCalls, msg.RequestID)
+		}
+		return v, nil
+		
+	case ToolExecutionResultMsg:
+		// Handle tool execution results
+		if msg.RequestID == v.requestID {
+			// Format results in a conversational way
+			var content string
+			if len(msg.Results) == 1 {
+				// Single tool result
+				content = msg.Results[0]
+			} else {
+				// Multiple tool results
+				content = "Here's what I accomplished:\n\n" + strings.Join(msg.Results, "\n")
+			}
+			
+			resultMsg := ChatMessage{
+				Role:      "assistant", 
+				Content:   content,
+				Timestamp: time.Now().Format("15:04"),
+			}
+			v.AddMessage(resultMsg)
+		}
+		return v, nil
+		
 	case tea.KeyMsg:
 		// Don't accept input if waiting for response
 		if v.waitingForResponse && msg.String() == "enter" {
@@ -147,7 +204,13 @@ func (v *ChatView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				v.waitingForResponse = true
 				
 				// Send to model
-				return v, GenerateResponse(v.model, userInput, v.requestID)
+				if v.agent != nil {
+					// Use tool-aware response generation
+					return v, v.generateResponseWithTools(userInput, v.requestID)
+				} else {
+					// Fallback to regular model response
+					return v, GenerateResponse(v.model, userInput, v.requestID)
+				}
 			}
 		case "ctrl+l":
 			v.input.SetValue("")
@@ -433,6 +496,162 @@ func (v *ChatView) wrapText(text string, width int) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// generateResponseWithTools generates a response using available tools
+func (v *ChatView) generateResponseWithTools(message, id string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		
+		// Get available tools from agent
+		tools, err := v.agent.GetMCPToolsAsDefinitions(ctx)
+		if err != nil {
+			// Fallback to regular generation if tool fetch fails
+			response, err := v.model.Generate(ctx, message, model.GenerateOptions{
+				Temperature: 0.7,
+				MaxTokens:   2048,
+			})
+			return ModelResponseMsg{
+				Response: response,
+				Error:    err,
+				ID:       id,
+			}
+		}
+		
+		// Use tool-aware generation
+		messages := []model.Message{
+			{Role: "user", Content: message},
+		}
+		
+		response, err := v.model.ChatWithTools(ctx, messages, tools, model.GenerateOptions{
+			Temperature: 0.7,
+			MaxTokens:   2048,
+		})
+		
+		// If tools were called, execute them
+		if response != nil && len(response.ToolCalls) > 0 {
+			return ToolCallDetectedMsg{
+				ToolCalls: response.ToolCalls,
+				RequestID: id,
+				Response:  response,
+			}
+		}
+		
+		return ModelResponseMsg{
+			Response: response,
+			Error:    err,
+			ID:       id,
+		}
+	}
+}
+
+// executeToolCalls executes the detected tool calls
+func (v *ChatView) executeToolCalls(toolCalls []model.ToolCall, requestID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		
+		var results []string
+		for _, toolCall := range toolCalls {
+			if v.agent != nil {
+				result, err := v.agent.ExecuteTool(ctx, toolCall.Name, toolCall.Arguments)
+				if err != nil {
+					results = append(results, fmt.Sprintf("❌ **%s** failed: %v", toolCall.Name, err))
+				} else if result.Success {
+					formattedResult := v.formatToolResult(toolCall.Name, result.Result)
+					results = append(results, fmt.Sprintf("✅ **%s**: %s", toolCall.Name, formattedResult))
+				} else {
+					results = append(results, fmt.Sprintf("❌ **%s**: %s", toolCall.Name, result.Error))
+				}
+			} else {
+				results = append(results, fmt.Sprintf("❌ **%s**: no agent available", toolCall.Name))
+			}
+		}
+		
+		return ToolExecutionResultMsg{
+			RequestID: requestID,
+			Results:   results,
+		}
+	}
+}
+
+// formatToolResult formats tool results in a user-friendly way
+func (v *ChatView) formatToolResult(toolName string, result interface{}) string {
+	switch toolName {
+	case "store_memory":
+		// For memory storage, just confirm success
+		return "Memory stored successfully"
+		
+	case "search":
+		// For search results, format nicely
+		return v.formatSearchResult(result)
+		
+	case "get_memory_by_id":
+		// For memory retrieval, show the content
+		return v.formatMemoryResult(result)
+		
+	case "analysis", "relationships", "stats", "sessions":
+		// For analytical tools, provide a summary
+		return v.formatAnalysisResult(result)
+		
+	default:
+		// For unknown tools, provide a clean fallback
+		return v.formatGenericResult(result)
+	}
+}
+
+// formatSearchResult formats search results nicely
+func (v *ChatView) formatSearchResult(result interface{}) string {
+	// Extract meaningful information from search results
+	if resultStr, ok := result.(string); ok {
+		// Try to parse if it's JSON-like
+		if strings.Contains(resultStr, "memories") && strings.Contains(resultStr, "total") {
+			// This looks like a search result summary
+			lines := strings.Split(resultStr, "\n")
+			var summary []string
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if strings.Contains(line, "total") || strings.Contains(line, "found") || strings.Contains(line, "results") {
+					summary = append(summary, line)
+					if len(summary) >= 3 { // Limit to first few lines
+						break
+					}
+				}
+			}
+			if len(summary) > 0 {
+				return strings.Join(summary, " • ")
+			}
+		}
+	}
+	return "Search completed successfully"
+}
+
+// formatMemoryResult formats memory retrieval results
+func (v *ChatView) formatMemoryResult(result interface{}) string {
+	if resultStr, ok := result.(string); ok {
+		// Extract content from memory result
+		if strings.Contains(resultStr, "content") {
+			return "Memory retrieved successfully"
+		}
+	}
+	return "Memory operation completed"
+}
+
+// formatAnalysisResult formats analysis tool results
+func (v *ChatView) formatAnalysisResult(result interface{}) string {
+	return "Analysis completed successfully"
+}
+
+// formatGenericResult provides a fallback for unknown tools
+func (v *ChatView) formatGenericResult(result interface{}) string {
+	if resultStr, ok := result.(string); ok {
+		// If it's a short string, show it
+		if len(resultStr) < 100 {
+			return resultStr
+		}
+		// If it's long, show a summary
+		return "Operation completed successfully"
+	}
+	return "Tool executed successfully"
 }
 
 // Focus sets focus to the input
