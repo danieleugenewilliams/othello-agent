@@ -327,15 +327,8 @@ func (a *Application) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.quitting = true
 			return a, tea.Quit
 			
-		case key.Matches(msg, a.keymap.Back):
-			// ESC key - navigate back to chat view from any other view
-			if a.currentView != ChatViewType {
-				a.currentView = ChatViewType
-				return a, nil
-			}
-			// If already in chat view, ESC does nothing (don't exit)
-			return a, nil
-			
+		// Removed global Back/Esc handler - let individual views handle their own back navigation
+		
 		case key.Matches(msg, a.keymap.SwitchView):
 			a.nextView()
 			return a, nil
