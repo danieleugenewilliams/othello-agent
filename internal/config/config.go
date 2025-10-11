@@ -221,6 +221,97 @@ func (c *Config) validate() error {
 	return nil
 }
 
+// Save writes the current configuration to the config file
+func (c *Config) Save() error {
+	if c.configFile == "" || c.configFile == "defaults (no config file found)" {
+		// No config file exists, create one
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get home directory: %w", err)
+		}
+		
+		configDir := filepath.Join(homeDir, ".othello")
+		if err := os.MkdirAll(configDir, 0755); err != nil {
+			return fmt.Errorf("failed to create config directory: %w", err)
+		}
+		
+		c.configFile = filepath.Join(configDir, "config.yaml")
+	}
+	
+	// Create viper instance and marshal the config
+	v := viper.New()
+	v.SetConfigType("yaml")
+	
+	// Set all values from current config
+	v.Set("model", c.Model)
+	v.Set("ollama", c.Ollama)
+	v.Set("tui", c.TUI)
+	v.Set("mcp", c.MCP)
+	v.Set("storage", c.Storage)
+	v.Set("logging", c.Logging)
+	
+	// Write to file
+	if err := v.WriteConfigAs(c.configFile); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+	
+	return nil
+}
+
+// AddMCPServer adds a new MCP server to the configuration
+func (c *Config) AddMCPServer(server ServerConfig) error {
+	// Check if server with same name already exists
+	for _, existing := range c.MCP.Servers {
+		if existing.Name == server.Name {
+			return fmt.Errorf("server with name '%s' already exists", server.Name)
+		}
+	}
+	
+	// Add the server
+	c.MCP.Servers = append(c.MCP.Servers, server)
+	
+	// Save the configuration
+	return c.Save()
+}
+
+// RemoveMCPServer removes an MCP server from the configuration
+func (c *Config) RemoveMCPServer(name string) error {
+	found := false
+	newServers := make([]ServerConfig, 0, len(c.MCP.Servers))
+	
+	for _, server := range c.MCP.Servers {
+		if server.Name != name {
+			newServers = append(newServers, server)
+		} else {
+			found = true
+		}
+	}
+	
+	if !found {
+		return fmt.Errorf("server with name '%s' not found", name)
+	}
+	
+	c.MCP.Servers = newServers
+	
+	// Save the configuration
+	return c.Save()
+}
+
+// ListMCPServers returns all configured MCP servers
+func (c *Config) ListMCPServers() []ServerConfig {
+	return c.MCP.Servers
+}
+
+// GetMCPServer returns a specific MCP server by name
+func (c *Config) GetMCPServer(name string) (*ServerConfig, error) {
+	for _, server := range c.MCP.Servers {
+		if server.Name == name {
+			return &server, nil
+		}
+	}
+	return nil, fmt.Errorf("server with name '%s' not found", name)
+}
+
 // CreateDefaultConfig creates a default configuration file in the user's home directory
 func CreateDefaultConfig() error {
 	homeDir, err := os.UserHomeDir()

@@ -227,3 +227,116 @@ logging:
 
 	assert.Contains(t, cfg.ConfigFile(), "config.yaml")
 }
+
+func TestConfig_AddMCPServer(t *testing.T) {
+	// Create a temporary config for testing
+	tempDir := t.TempDir()
+	configFile := filepath.Join(tempDir, "test_config.yaml")
+	
+	cfg := &Config{
+		MCP: MCPConfig{
+			Servers: []ServerConfig{},
+		},
+		configFile: configFile,
+	}
+	
+	// Test adding a new server
+	server := ServerConfig{
+		Name:      "test-server",
+		Command:   "echo",
+		Args:      []string{"hello"},
+		Transport: "stdio",
+		Timeout:   30 * time.Second,
+	}
+	
+	err := cfg.AddMCPServer(server)
+	require.NoError(t, err)
+	
+	// Verify server was added
+	assert.Len(t, cfg.MCP.Servers, 1)
+	assert.Equal(t, "test-server", cfg.MCP.Servers[0].Name)
+	assert.Equal(t, "echo", cfg.MCP.Servers[0].Command)
+	assert.Equal(t, []string{"hello"}, cfg.MCP.Servers[0].Args)
+	
+	// Test adding duplicate server (should fail)
+	err = cfg.AddMCPServer(server)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "already exists")
+	
+	// Verify only one server exists
+	assert.Len(t, cfg.MCP.Servers, 1)
+}
+
+func TestConfig_RemoveMCPServer(t *testing.T) {
+	// Create a config with test servers
+	cfg := &Config{
+		MCP: MCPConfig{
+			Servers: []ServerConfig{
+				{Name: "server1", Command: "echo", Transport: "stdio"},
+				{Name: "server2", Command: "cat", Transport: "stdio"},
+			},
+		},
+		configFile: filepath.Join(t.TempDir(), "test_config.yaml"),
+	}
+	
+	// Test removing existing server
+	err := cfg.RemoveMCPServer("server1")
+	require.NoError(t, err)
+	
+	// Verify server was removed
+	assert.Len(t, cfg.MCP.Servers, 1)
+	assert.Equal(t, "server2", cfg.MCP.Servers[0].Name)
+	
+	// Test removing non-existent server
+	err = cfg.RemoveMCPServer("nonexistent")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+	
+	// Verify remaining server is unchanged
+	assert.Len(t, cfg.MCP.Servers, 1)
+}
+
+func TestConfig_GetMCPServer(t *testing.T) {
+	cfg := &Config{
+		MCP: MCPConfig{
+			Servers: []ServerConfig{
+				{Name: "server1", Command: "echo", Transport: "stdio"},
+				{Name: "server2", Command: "cat", Transport: "stdio"},
+			},
+		},
+	}
+	
+	// Test getting existing server
+	server, err := cfg.GetMCPServer("server1")
+	require.NoError(t, err)
+	assert.NotNil(t, server)
+	assert.Equal(t, "server1", server.Name)
+	assert.Equal(t, "echo", server.Command)
+	
+	// Test getting non-existent server
+	server, err = cfg.GetMCPServer("nonexistent")
+	assert.Error(t, err)
+	assert.Nil(t, server)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestConfig_ListMCPServers(t *testing.T) {
+	cfg := &Config{
+		MCP: MCPConfig{
+			Servers: []ServerConfig{
+				{Name: "server1", Command: "echo", Transport: "stdio"},
+				{Name: "server2", Command: "cat", Transport: "stdio"},
+			},
+		},
+	}
+	
+	servers := cfg.ListMCPServers()
+	assert.Len(t, servers, 2)
+	assert.Equal(t, "server1", servers[0].Name)
+	assert.Equal(t, "server2", servers[1].Name)
+	
+	// Test empty list
+	emptyConfig := &Config{MCP: MCPConfig{Servers: []ServerConfig{}}}
+	servers = emptyConfig.ListMCPServers()
+	assert.Len(t, servers, 0)
+}
