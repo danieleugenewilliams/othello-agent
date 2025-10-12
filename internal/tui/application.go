@@ -30,11 +30,6 @@ type KeyMap struct {
 	Back       key.Binding
 	Submit     key.Binding
 	SwitchView key.Binding
-	ServerView key.Binding
-	ToolView   key.Binding
-	HelpView   key.Binding
-	HistoryView key.Binding
-	ChatView   key.Binding
 	ClearInput key.Binding
 }
 
@@ -57,26 +52,6 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("tab"),
 			key.WithHelp("tab", "switch view"),
 		),
-		ServerView: key.NewBinding(
-			key.WithKeys("2"),
-			key.WithHelp("2", "servers"),
-		),
-		ToolView: key.NewBinding(
-			key.WithKeys("3"),
-			key.WithHelp("3", "tools"),
-		),
-		HelpView: key.NewBinding(
-			key.WithKeys("4"),
-			key.WithHelp("4", "help"),
-		),
-		HistoryView: key.NewBinding(
-			key.WithKeys("5"),
-			key.WithHelp("5", "history"),
-		),
-		ChatView: key.NewBinding(
-			key.WithKeys("1"),
-			key.WithHelp("1", "chat"),
-		),
 		ClearInput: key.NewBinding(
 			key.WithKeys("ctrl+l"),
 			key.WithHelp("ctrl+l", "clear input"),
@@ -86,14 +61,13 @@ func DefaultKeyMap() KeyMap {
 
 // ShortHelp returns keybindings to be shown in the mini help view
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Submit, k.SwitchView, k.ServerView, k.ToolView, k.HelpView}
+	return []key.Binding{k.Submit, k.SwitchView}
 }
 
 // FullHelp returns keybindings for the expanded help view
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Submit, k.SwitchView, k.ClearInput, k.Back},
-		{k.ChatView, k.ServerView, k.ToolView, k.HelpView, k.HistoryView},
 		{k.Quit},
 	}
 }
@@ -331,26 +305,6 @@ func (a *Application) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		
 		case key.Matches(msg, a.keymap.SwitchView):
 			a.nextView()
-			return a, nil
-			
-		case key.Matches(msg, a.keymap.ServerView):
-			a.currentView = ServerViewType
-			return a, nil
-			
-		case key.Matches(msg, a.keymap.ToolView):
-			a.currentView = ToolViewType
-			return a, nil
-			
-		case key.Matches(msg, a.keymap.HelpView):
-			a.currentView = HelpViewType
-			return a, nil
-			
-		case key.Matches(msg, a.keymap.HistoryView):
-			a.currentView = HistoryViewType
-			return a, nil
-			
-		case key.Matches(msg, a.keymap.ChatView):
-			a.currentView = ChatViewType
 			return a, nil
 		}
 	}

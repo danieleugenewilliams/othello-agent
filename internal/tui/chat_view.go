@@ -74,7 +74,7 @@ func NewChatViewWithAgent(styles Styles, keymap KeyMap, m model.Model, agent Age
 	// Add welcome message with command hints
 	welcomeMsg := ChatMessage{
 		Role:      "assistant",
-		Content:   "Welcome to Othello AI Agent! 🤖\n\nQuick commands:\n• /mcp - View MCP servers\n• /tools - Browse and execute tools\n• /help - Show detailed help\n• /exit - Exit application\n\nTips:\n• Use mouse to select text for copying\n• Ctrl+C to copy selected text to clipboard\n\nOr just type naturally to chat!",
+		Content:   "Welcome to Othello AI Agent! 🤖\n\nQuick commands:\n• /mcp - View MCP servers\n• /tools - Browse tools\n• /help - Show help\n• /history - View chat history\n• /exit - Exit application\n\nNavigation:\n• Tab - Switch views\n• Esc - Go back\n\nOr just type naturally to chat!",
 		Timestamp: time.Now().Format("15:04:05"),
 	}
 	chatView.AddMessage(welcomeMsg)
