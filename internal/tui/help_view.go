@@ -37,6 +37,16 @@ func (v *HelpView) Init() tea.Cmd {
 
 // Update handles updates for the help view
 func (v *HelpView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "esc":
+			// Go back to chat view
+			return v, func() tea.Msg {
+				return ViewSwitchMsg{ViewType: ChatViewType}
+			}
+		}
+	}
 	return v, nil
 }
 

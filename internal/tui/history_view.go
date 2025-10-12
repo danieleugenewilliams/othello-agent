@@ -34,6 +34,17 @@ func (v *HistoryView) Init() tea.Cmd {
 
 // Update handles updates for the history view
 func (v *HistoryView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "esc":
+			// Go back to chat view
+			return v, func() tea.Msg {
+				return ViewSwitchMsg{ViewType: ChatViewType}
+			}
+		}
+	}
+	
 	var cmd tea.Cmd
 	v.viewport, cmd = v.viewport.Update(msg)
 	return v, cmd
