@@ -206,10 +206,13 @@ func (m *OllamaModel) createToolPrompt(tools []ToolDefinition) string {
 		return "You are a helpful AI assistant."
 	}
 	
-	prompt := `You are a helpful AI assistant with access to tools. When you need to use a tool, respond with a tool call in this exact format:
+	prompt := `You are a helpful AI assistant with access to the following tools. You can use these tools to help answer questions.
 
+IMPORTANT: When you need to use a tool, you MUST respond in this EXACT format:
 TOOL_CALL: tool_name
 ARGUMENTS: {"param1": "value1", "param2": "value2"}
+
+You MUST include ALL required parameters. Do not make up parameter names - only use the parameters listed below.
 
 Available tools:
 `
@@ -220,6 +223,16 @@ Available tools:
 		if tool.Parameters != nil {
 			prompt += m.formatParameters(tool.Parameters)
 		}
+	}
+	
+	// Add concrete example if we have tools with parameters
+	if len(tools) > 0 {
+		prompt += "\n\nExample usage:"
+		prompt += "\nIf user asks: 'Search my memories for Python tutorials'"
+		prompt += "\nYou should respond:"
+		prompt += "\nTOOL_CALL: search"
+		prompt += "\nARGUMENTS: {\"query\": \"Python tutorials\", \"search_type\": \"semantic\"}"
+		prompt += "\n\nRemember: Only include parameters that are listed for that specific tool. Include all required parameters."
 	}
 	
 	prompt += "\n\nOnly use tools when necessary to answer the user's question. If you don't need a tool, respond normally."
