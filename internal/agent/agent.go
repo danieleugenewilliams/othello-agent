@@ -223,6 +223,32 @@ func (a *Agent) SubscribeToUpdates() <-chan interface{} {
 func (a *Agent) ExecuteTool(ctx context.Context, toolName string, params map[string]interface{}) (*tui.ToolExecutionResult, error) {
 	a.logger.Printf("Executing tool: %s with params: %+v", toolName, params)
 	
+	// Get the tool schema for validation
+	tool, exists := a.mcpRegistry.GetTool(toolName)
+	if !exists {
+		err := fmt.Errorf("tool '%s' not found", toolName)
+		a.logger.Printf("Tool not found: %s", toolName)
+		return &tui.ToolExecutionResult{
+			ToolName: toolName,
+			Success:  false,
+			Error:    err.Error(),
+		}, nil
+	}
+	
+	// Validate the tool call before execution
+	toolCall := model.ToolCall{
+		Name:      toolName,
+		Arguments: params,
+	}
+	if err := ValidateToolCall(toolCall, tool); err != nil {
+		a.logger.Printf("Tool validation failed for %s: %v", toolName, err)
+		return &tui.ToolExecutionResult{
+			ToolName: toolName,
+			Success:  false,
+			Error:    fmt.Sprintf("Invalid parameters: %v", err),
+		}, nil
+	}
+	
 	// Execute the tool using the tool executor
 	result, err := a.toolExecutor.Execute(ctx, toolName, params)
 	if err != nil {
