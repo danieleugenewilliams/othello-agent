@@ -208,25 +208,8 @@ func (a *Agent) GetMCPTools(ctx context.Context) ([]tui.Tool, error) {
 func (a *Agent) GetMCPToolsAsDefinitions(ctx context.Context) ([]model.ToolDefinition, error) {
 	mcpTools := a.mcpRegistry.ListTools()
 	
-	// Convert mcp.Tool to model.ToolDefinition
-	definitions := make([]model.ToolDefinition, len(mcpTools))
-	for i, mcpTool := range mcpTools {
-		// Create basic parameters structure
-		parameters := map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{},
-			"required": []string{},
-		}
-		
-		// TODO: In a more sophisticated implementation, we would parse
-		// the actual MCP tool schema to create proper parameters
-		
-		definitions[i] = model.ToolDefinition{
-			Name:        mcpTool.Name,
-			Description: mcpTool.Description,
-			Parameters:  parameters,
-		}
-	}
+	// Use our new conversion function that properly handles JSON schemas
+	definitions := ConvertMCPToolsToDefinitions(mcpTools)
 	
 	return definitions, nil
 }
