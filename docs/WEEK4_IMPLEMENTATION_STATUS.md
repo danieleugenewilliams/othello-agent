@@ -52,96 +52,46 @@ Tool execution failed for stats: unknown parameter 'concept'
 
 ## Week 4 Implementation Plan (TDD)
 
-### Task 1: Convert MCP Tool Schemas to Model ToolDefinitions ✅
+### Task 1: Convert MCP Tool Schemas to Model Definitions (TDD)
 
-**Goal**: Format tool schemas properly for model consumption
+**Status**: ✅ COMPLETE
 
-**Test File**: `internal/agent/tool_conversion_test.go` (NEW)
+**Objective**: Ensure the model receives complete and accurate tool schemas by converting MCP InputSchema (JSON Schema format) directly to model.ToolDefinition format.
 
-**Test Cases**:
-```go
-func TestConvertMCPToolToDefinition(t *testing.T) {
-    // GIVEN: MCP tool with JSON schema
-    mcpTool := mcp.Tool{
-        Name: "search",
-        Description: "Search memories",
-        InputSchema: map[string]interface{}{
-            "type": "object",
-            "properties": map[string]interface{}{
-                "query": map[string]interface{}{
-                    "type": "string",
-                    "description": "Search query",
-                },
-                "search_type": map[string]interface{}{
-                    "type": "string",
-                    "enum": []interface{}{"semantic", "tags", "date_range"},
-                },
-            },
-            "required": []interface{}{"query"},
-        },
-    }
-    
-    // WHEN: Convert to model definition
-    definition := ConvertMCPToolToDefinition(mcpTool)
-    
-    // THEN: Should have proper structure
-    assert.Equal(t, "search", definition.Name)
-    assert.Contains(t, definition.Parameters, "type")
-    assert.Contains(t, definition.Parameters, "properties")
-    assert.Contains(t, definition.Parameters, "required")
-}
-```
+**Approach**:
+1. ✅ RED: Write tests for schema conversion function
+2. ✅ GREEN: Implement conversion that passes MCP InputSchema unchanged
+3. ✅ INTEGRATE: Wire up in Agent.GetMCPToolsAsDefinitions()
 
-**Implementation** (`internal/agent/tool_conversion.go` - NEW):
-- Extract InputSchema from mcp.Tool
-- Pass directly to model.ToolDefinition
-- Model sees full JSON Schema specification
+**Implementation**:
+- Created `internal/agent/tool_conversion.go` with schema conversion functions
+- Created `internal/agent/tool_conversion_test.go` with 4 passing tests
+- Updated `Agent.GetMCPToolsAsDefinitions()` to use new conversion
+- All tests pass, build successful
+
+**Validation (TUI Test)**:
+- Asked: "Can you see memories for RDS architecture?"
+- Result: Model responded "Let me help you with that using the search tool..."
+- **Success**: Model now recognizes tools are available
+- **Issue**: Tool execution returned no data (likely wrong parameters - addressed in Task 2-3)
 
 ---
 
-### Task 2: Improve Tool Prompt with Schema Details
+### Task 2: Improve Tool Prompt Generation (TDD)
 
-**Goal**: Help model understand exact parameters
+**Status**: 🔄 RED Phase - Tests Written
 
-**Test File**: `internal/model/ollama_test.go`
+**Objective**: Format tool schemas in human-readable way so model understands parameters clearly.
 
-**Test Case**:
-```go
-func TestOllamaModel_CreateToolPrompt_WithSchema(t *testing.T) {
-    tools := []ToolDefinition{
-        {
-            Name: "stats",
-            Description: "Get statistics",
-            Parameters: map[string]interface{}{
-                "type": "object",
-                "properties": map[string]interface{}{
-                    "stats_type": map[string]interface{}{
-                        "type": "enum",
-                        "enum": []string{"session", "domain", "category"},
-                    },
-                },
-                "required": []string{"stats_type"},
-            },
-        },
-    }
-    
-    model := NewOllamaModel("http://localhost:11434", "qwen2.5:3b")
-    prompt := model.createToolPrompt(tools)
-    
-    // Should explain parameters clearly
-    assert.Contains(t, prompt, "stats_type")
-    assert.Contains(t, prompt, "required")
-    assert.Contains(t, prompt, "session")
-    assert.Contains(t, prompt, "domain")
-    assert.Contains(t, prompt, "category")
-}
-```
+**Approach**:
+1. 🔄 RED: Write tests for improved `createToolPrompt` formatting
+2. ⏭️ GREEN: Implement readable schema formatting
+3. ⏭️ Include: parameter types, required vs optional, enum values, defaults, descriptions
 
-**Implementation** (`internal/model/ollama.go:createToolPrompt`):
-- Parse `Parameters` field (JSON Schema)
-- Format each parameter with type, description, enum values
-- Show required vs optional clearly
-- Give examples for complex parameters
+**Progress**:
+- Created `internal/model/tool_prompt_test.go` with comprehensive test cases
+- Tests cover: basic formatting, required/optional params, enums, defaults, multiple tools
+- Ready for GREEN phase implementation
 
 ---
 
