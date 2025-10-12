@@ -287,3 +287,15 @@ func (r *ToolRegistry) GetToolsByServer(serverName string) []Tool {
 
 	return tools
 }
+
+// Clear removes all tools and servers from the registry
+func (r *ToolRegistry) Clear() {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	
+	r.tools = make(map[string]Tool)
+	r.servers = make(map[string]Client)
+	r.cache.Clear()
+	
+	r.logger.Info("Cleared tool registry")
+}

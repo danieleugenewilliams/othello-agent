@@ -130,6 +130,11 @@ func (a *Agent) Stop(ctx context.Context) error {
 		a.logger.Printf("Error stopping MCP connections: %v", err)
 	}
 	
+	// Clear tool registry
+	if a.mcpRegistry != nil {
+		a.mcpRegistry.Clear()
+	}
+	
 	a.logger.Println("Agent stopped")
 	return nil
 }
