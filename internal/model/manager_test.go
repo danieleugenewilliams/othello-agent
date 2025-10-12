@@ -32,6 +32,14 @@ func (m *MockModel) Chat(ctx context.Context, messages []Message, options Genera
 	return args.Get(0).(*Response), args.Error(1)
 }
 
+func (m *MockModel) ChatWithTools(ctx context.Context, messages []Message, tools []ToolDefinition, options GenerateOptions) (*Response, error) {
+	args := m.Called(ctx, messages, tools, options)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*Response), args.Error(1)
+}
+
 func (m *MockModel) IsAvailable(ctx context.Context) bool {
 	args := m.Called(ctx)
 	return args.Bool(0)

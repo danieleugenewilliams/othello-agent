@@ -215,15 +215,93 @@ Available tools:
 `
 	
 	for _, tool := range tools {
-		prompt += fmt.Sprintf("\n- %s: %s", tool.Name, tool.Description)
+		prompt += fmt.Sprintf("\n- **%s**: %s", tool.Name, tool.Description)
+		
 		if tool.Parameters != nil {
-			prompt += fmt.Sprintf("\n  Parameters: %v", tool.Parameters)
+			prompt += m.formatParameters(tool.Parameters)
 		}
 	}
 	
 	prompt += "\n\nOnly use tools when necessary to answer the user's question. If you don't need a tool, respond normally."
 	
 	return prompt
+}
+
+// formatParameters formats JSON Schema parameters in a human-readable way
+func (m *OllamaModel) formatParameters(params interface{}) string {
+	paramsMap, ok := params.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	
+	properties, ok := paramsMap["properties"].(map[string]interface{})
+	if !ok || len(properties) == 0 {
+		return ""
+	}
+	
+	// Get required fields
+	requiredFields := make(map[string]bool)
+	if required, ok := paramsMap["required"].([]interface{}); ok {
+		for _, field := range required {
+			if fieldName, ok := field.(string); ok {
+				requiredFields[fieldName] = true
+			}
+		}
+	}
+	
+	result := "\n  Parameters:"
+	
+	// Format each parameter
+	for paramName, paramInfo := range properties {
+		paramMap, ok := paramInfo.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		
+		// Parameter name with required/optional indicator
+		if requiredFields[paramName] {
+			result += fmt.Sprintf("\n    - %s (required)", paramName)
+		} else {
+			result += fmt.Sprintf("\n    - %s (optional)", paramName)
+		}
+		
+		// Type
+		if paramType, ok := paramMap["type"].(string); ok {
+			result += fmt.Sprintf(", type: %s", paramType)
+		}
+		
+		// Description
+		if desc, ok := paramMap["description"].(string); ok {
+			result += fmt.Sprintf(" - %s", desc)
+		}
+		
+		// Enum values
+		if enum, ok := paramMap["enum"].([]interface{}); ok && len(enum) > 0 {
+			result += "\n      Allowed values: "
+			for i, val := range enum {
+				if i > 0 {
+					result += ", "
+				}
+				result += fmt.Sprintf("%v", val)
+			}
+		}
+		
+		// Default value
+		if defaultVal, ok := paramMap["default"]; ok {
+			result += fmt.Sprintf("\n      Default: %v", defaultVal)
+		}
+		
+		// Array items
+		if paramType, _ := paramMap["type"].(string); paramType == "array" {
+			if items, ok := paramMap["items"].(map[string]interface{}); ok {
+				if itemType, ok := items["type"].(string); ok {
+					result += fmt.Sprintf(" (items are %s)", itemType)
+				}
+			}
+		}
+	}
+	
+	return result
 }
 
 // parseToolCalls extracts tool calls from the model response
