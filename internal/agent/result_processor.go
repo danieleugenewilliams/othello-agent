@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"strings"
+
+	"github.com/danieleugenewilliams/othello-agent/internal/mcp"
 )
 
 // ToolResultProcessor processes raw tool results into user-friendly summaries
@@ -492,7 +494,13 @@ func (p *ToolResultProcessor) formatGenericResult(result interface{}) string {
 
 // extractMCPToolResult attempts to extract an MCP ToolResult from the raw result
 func (p *ToolResultProcessor) extractMCPToolResult(rawResult interface{}) interface{} {
-	// Check if it has the MCP ToolResult structure
+	// Check if it's already a proper MCP ToolResult
+	if toolResult, ok := rawResult.(*mcp.ToolResult); ok {
+		p.logf("[EXTRACT] Found native MCP ToolResult with %d content items", len(toolResult.Content))
+		return toolResult
+	}
+
+	// Check if it has the MCP ToolResult structure as a map
 	if resultMap, ok := rawResult.(map[string]interface{}); ok {
 		if contentField, hasContent := resultMap["content"]; hasContent {
 			if contentArray, ok := contentField.([]interface{}); ok {
@@ -507,22 +515,41 @@ func (p *ToolResultProcessor) extractMCPToolResult(rawResult interface{}) interf
 
 // formatMCPContent formats MCP Content array according to the MCP specification
 func (p *ToolResultProcessor) formatMCPContent(contents interface{}) string {
-	contentMap, ok := contents.(map[string]interface{})
-	if !ok {
-		p.logf("[FORMAT] Invalid content format")
-		return "Invalid tool result format"
-	}
+	var contentArray []interface{}
 
-	contentField, hasContent := contentMap["content"]
-	if !hasContent {
-		p.logf("[FORMAT] No content field found")
-		return "No content in tool result"
-	}
+	// Handle native MCP ToolResult
+	if toolResult, ok := contents.(*mcp.ToolResult); ok {
+		p.logf("[FORMAT] Processing native MCP ToolResult with %d content items", len(toolResult.Content))
 
-	contentArray, ok := contentField.([]interface{})
-	if !ok {
-		p.logf("[FORMAT] Content is not an array")
-		return "Invalid content format"
+		// Convert mcp.Content to []interface{} for uniform processing
+		contentArray = make([]interface{}, len(toolResult.Content))
+		for i, content := range toolResult.Content {
+			contentArray[i] = map[string]interface{}{
+				"type": content.Type,
+				"text": content.Text,
+				"data": content.Data,
+			}
+		}
+	} else {
+		// Handle map format
+		contentMap, ok := contents.(map[string]interface{})
+		if !ok {
+			p.logf("[FORMAT] Invalid content format")
+			return "Invalid tool result format"
+		}
+
+		contentField, hasContent := contentMap["content"]
+		if !hasContent {
+			p.logf("[FORMAT] No content field found")
+			return "No content in tool result"
+		}
+
+		var mapOk bool
+		contentArray, mapOk = contentField.([]interface{})
+		if !mapOk {
+			p.logf("[FORMAT] Content is not an array")
+			return "Invalid content format"
+		}
 	}
 
 	if len(contentArray) == 0 {

@@ -583,14 +583,8 @@ func (a *Agent) ExecuteTool(ctx context.Context, toolName string, params map[str
 	// Process the result into a natural language summary
 	processor := &ToolResultProcessor{}
 
-	// Extract raw data from ToolResult for processing
-	rawData, err := extractRawDataFromToolResult(result.Result)
-	if err != nil {
-		a.logger.Printf("Warning: Failed to extract raw data from result for %s: %v", toolName, err)
-		rawData = result.Result // Fallback to original result
-	}
-
-	processedResult, err := processor.ProcessToolResult(ctx, toolName, rawData, "")
+	// Use universal MCP processor directly with the ToolResult
+	processedResult, err := processor.ProcessToolResult(ctx, toolName, result.Result, "")
 	if err != nil {
 		// Log error but don't fail - use original result as fallback
 		a.logger.Printf("Warning: Failed to process result for %s: %v", toolName, err)
@@ -609,27 +603,9 @@ func (a *Agent) ExecuteTool(ctx context.Context, toolName string, params map[str
 
 // ProcessToolResult processes tool results using the intelligent result processor
 func (a *Agent) ProcessToolResult(ctx context.Context, toolName string, result *mcp.ExecuteResult, userQuery string) (string, error) {
-	// Extract raw data from ToolResult using our extraction function
-	rawData, err := extractRawDataFromToolResult(result.Result)
-	if err != nil {
-		a.logger.Printf("Warning: Failed to extract raw data from result for %s: %v", toolName, err)
-		rawData = result.Result // Fallback to original result
-	}
-
-	// CRITICAL FIX: If rawData is a JSON string, use robust parsing with sanitization
-	if rawDataStr, ok := rawData.(string); ok && len(rawDataStr) > 0 {
-		parsedData, jsonErr := sanitizeAndParseJSON(rawDataStr, a.logger)
-		if jsonErr == nil {
-			a.logger.Printf("[PROCESS] Successfully parsed JSON string to %T", parsedData)
-			rawData = parsedData
-		} else {
-			a.logger.Printf("[PROCESS] Robust JSON parsing failed: %v", jsonErr)
-		}
-	}
-
-	// Process using the intelligent processor
+	// Use universal MCP processor directly with the ToolResult
 	processor := &ToolResultProcessor{Logger: a.logger}
-	return processor.ProcessToolResult(ctx, toolName, rawData, userQuery)
+	return processor.ProcessToolResult(ctx, toolName, result.Result, userQuery)
 }
 
 // ExecuteToolUnified provides a single, consistent pathway for tool execution
@@ -665,32 +641,10 @@ func (a *Agent) ExecuteToolUnified(ctx context.Context, toolName string, params 
 
 	a.logger.Printf("Tool %s executed successfully (unified)", toolName)
 
-	// Process the result into a natural language summary using our intelligent processor
-	rawData, err := extractRawDataFromToolResult(result.Result)
-	if err != nil {
-		a.logger.Printf("Warning: Failed to extract raw data from result for %s: %v", toolName, err)
-		rawData = result.Result // Fallback to original result
-	}
-
-	// CRITICAL FIX: If rawData is a JSON string, use robust parsing with sanitization
-	if rawDataStr, ok := rawData.(string); ok && len(rawDataStr) > 0 {
-		parsedData, jsonErr := sanitizeAndParseJSON(rawDataStr, a.logger)
-		if jsonErr == nil {
-			a.logger.Printf("[UNIFIED] Successfully parsed JSON string to %T", parsedData)
-			rawData = parsedData
-		} else {
-			a.logger.Printf("[UNIFIED] Robust JSON parsing failed: %v", jsonErr)
-		}
-	}
-
+	// Use universal MCP processor directly with the ToolResult
 	processor := &ToolResultProcessor{Logger: a.logger}
-	a.logger.Printf("[UNIFIED] About to call processor with toolName=%s, rawData type=%T", toolName, rawData)
-	if rawData != nil {
-		if rawDataBytes, err := json.Marshal(rawData); err == nil && len(rawDataBytes) < 1000 {
-			a.logger.Printf("[UNIFIED] rawData content: %s", string(rawDataBytes))
-		}
-	}
-	processedResult, err := processor.ProcessToolResult(ctx, toolName, rawData, userContext)
+	a.logger.Printf("[UNIFIED] About to call processor with toolName=%s", toolName)
+	processedResult, err := processor.ProcessToolResult(ctx, toolName, result.Result, userContext)
 	a.logger.Printf("[UNIFIED] Processor returned result length=%d, error=%v", len(processedResult), err)
 	if err != nil {
 		// Log error but don't fail - use a basic fallback
