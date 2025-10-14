@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 
 	"github.com/danieleugenewilliams/othello-agent/internal/mcp"
@@ -1005,23 +1006,31 @@ func (p *ToolResultProcessor) hasRecentSearches(history []model.Message) bool {
 // This makes metadata like memory_id, category_id available for follow-up requests
 func (p *ToolResultProcessor) extractAndStoreMetadata(rawResult interface{}, convContext *model.ConversationContext) {
 	if convContext == nil {
+		p.logf("[METADATA-DEBUG] ConvContext is NIL, cannot extract metadata")
 		return
 	}
+
+	p.logf("[METADATA-DEBUG] ConvContext pointer: %p, current metadata fields: %d", convContext, len(convContext.ExtractedMetadata))
 
 	// Initialize metadata map if needed
 	if convContext.ExtractedMetadata == nil {
 		convContext.ExtractedMetadata = make(map[string]interface{})
+		p.logf("[METADATA-DEBUG] Initialized ExtractedMetadata map")
 	}
 
 	// Try to extract metadata from MCP ToolResult format
 	if toolResult, ok := rawResult.(*mcp.ToolResult); ok {
+		p.logf("[METADATA-DEBUG] Raw result is MCP ToolResult, extracting...")
 		p.extractMetadataFromMCPResult(toolResult, convContext)
+		p.logf("[METADATA-DEBUG] After MCP extraction, metadata fields: %d", len(convContext.ExtractedMetadata))
 		return
 	}
 
 	// Try to extract from map format
 	if resultMap, ok := rawResult.(map[string]interface{}); ok {
+		p.logf("[METADATA-DEBUG] Raw result is map[string]interface{}, extracting...")
 		p.extractMetadataFromMap(resultMap, convContext)
+		p.logf("[METADATA-DEBUG] After map extraction, metadata fields: %d", len(convContext.ExtractedMetadata))
 		return
 	}
 
@@ -1030,21 +1039,82 @@ func (p *ToolResultProcessor) extractAndStoreMetadata(rawResult interface{}, con
 
 // extractMetadataFromMCPResult extracts metadata from MCP ToolResult
 func (p *ToolResultProcessor) extractMetadataFromMCPResult(toolResult *mcp.ToolResult, convContext *model.ConversationContext) {
+	p.logf("[METADATA-MCP] Extracting from MCP ToolResult with %d content items", len(toolResult.Content))
+	
 	// MCP results have content array - try to parse JSON from text content
-	for _, content := range toolResult.Content {
+	for i, content := range toolResult.Content {
+		p.logf("[METADATA-MCP] Content[%d]: type=%s, text_len=%d", i, content.Type, len(content.Text))
+		
 		if content.Type == "text" && content.Text != "" {
-			// Try to parse the text as JSON
 			trimmed := strings.TrimSpace(content.Text)
+			p.logf("[METADATA-MCP] Trimmed text preview (first 200 chars): %s", truncateString(trimmed, 200))
+			
+			// First, try to parse as JSON for structured responses
 			if (strings.HasPrefix(trimmed, "{") && strings.HasSuffix(trimmed, "}")) ||
 			   (strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]")) {
+				p.logf("[METADATA-MCP] Text looks like JSON, attempting to parse...")
 				var parsed map[string]interface{}
 				if err := json.Unmarshal([]byte(trimmed), &parsed); err == nil {
+					p.logf("[METADATA-MCP] Successfully parsed JSON with %d top-level keys", len(parsed))
 					p.extractMetadataFromMap(parsed, convContext)
 					return
+				} else {
+					p.logf("[METADATA-MCP] Failed to parse JSON: %v", err)
 				}
+			}
+			
+			// If not JSON, try regex extraction for common patterns
+			p.logf("[METADATA-MCP] Attempting regex-based extraction from human-readable text...")
+			extracted := p.extractMetadataWithRegex(trimmed, convContext)
+			if extracted > 0 {
+				p.logf("[METADATA-MCP] Extracted %d metadata fields using regex", extracted)
+				return
 			}
 		}
 	}
+	p.logf("[METADATA-MCP] No extractable metadata found in MCP ToolResult")
+}
+
+// extractMetadataWithRegex extracts metadata from human-readable text using regex patterns
+func (p *ToolResultProcessor) extractMetadataWithRegex(text string, convContext *model.ConversationContext) int {
+	extracted := 0
+	
+	// Common patterns for IDs and metadata in human-readable text
+	patterns := map[string]*regexp.Regexp{
+		// Match "ID: <uuid>" or "with ID: <uuid>" or "memory_id: <uuid>"
+		"memory_id": regexp.MustCompile(`(?i)(?:memory[_\s-]?)?(?:with\s+)?ID:\s*([a-f0-9\-]{36})`),
+		// Match "document ID: <uuid>" or "document_id: <uuid>"
+		"document_id": regexp.MustCompile(`(?i)document[_\s-]?ID:\s*([a-f0-9\-]{36})`),
+		// Match "session ID: <uuid>" or "session_id: <uuid>"
+		"session_id": regexp.MustCompile(`(?i)session[_\s-]?ID:\s*([a-f0-9\-]{36})`),
+		// Match "category ID: <uuid>" or "category_id: <uuid>"
+		"category_id": regexp.MustCompile(`(?i)category[_\s-]?ID:\s*([a-f0-9\-]{36})`),
+		// Match "total: <number>" or "count: <number>"
+		"total": regexp.MustCompile(`(?i)(?:total|count):\s*(\d+)`),
+	}
+	
+	for key, pattern := range patterns {
+		if matches := pattern.FindStringSubmatch(text); len(matches) > 1 {
+			value := matches[1]
+			// Skip if already exists
+			if _, exists := convContext.ExtractedMetadata[key]; exists {
+				continue
+			}
+			convContext.ExtractedMetadata[key] = value
+			extracted++
+			p.logf("[METADATA-REGEX] Extracted %s = %v", key, value)
+		}
+	}
+	
+	return extracted
+}
+
+// truncateString truncates a string to maxLen characters
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 // extractMetadataFromMap extracts metadata from a map result
