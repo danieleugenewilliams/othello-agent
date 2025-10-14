@@ -1,8 +1,9 @@
 # User Guide
 ## Othello AI Agent
 
-**Version:** 1.0  
-**Date:** October 10, 2025  
+**Version:** 1.1
+**Date:** October 13, 2025
+**Status:** Updated with Memory System Features
 
 ---
 
@@ -11,11 +12,12 @@
 1. [Quick Start](#quick-start)
 2. [Installation](#installation)
 3. [Basic Usage](#basic-usage)
-4. [MCP Server Management](#mcp-server-management)
-5. [Configuration](#configuration)
-6. [Advanced Features](#advanced-features)
-7. [Troubleshooting](#troubleshooting)
-8. [Examples](#examples)
+4. [Memory System](#memory-system)
+5. [MCP Server Management](#mcp-server-management)
+6. [Configuration](#configuration)
+7. [Advanced Features](#advanced-features)
+8. [Troubleshooting](#troubleshooting)
+9. [Examples](#examples)
 
 ---
 
@@ -187,6 +189,111 @@ The Terminal User Interface provides several views:
 | `Ctrl+H` | Toggle help |
 | `↑/↓` | Navigate history |
 | `Ctrl+U` | Clear input |
+
+---
+
+## Memory System
+
+Othello features an advanced memory system that allows you to store, search, and analyze information across conversations. The memory system uses AI-powered semantic search to help you find relevant information quickly.
+
+### Searching Memories
+
+**From the Chat Interface:**
+
+Simply ask Othello to search for information:
+
+```
+> Can you find memories about newsletters?
+> Search for information on Claude Code for Non-Coders
+> What do I have stored about Minecraft AI?
+```
+
+**Memory Search Results:**
+
+When Othello finds relevant memories, it displays:
+- **Content Preview**: Key information from each memory
+- **Tags**: Categorization labels (e.g., newsletter, claude-code, week-2)
+- **Importance**: Priority level (1-10 scale)
+- **Session Information**: When and where the memory was created
+- **Domain**: Knowledge area classification
+
+### Storing Memories
+
+Othello automatically stores important information from your conversations, but you can also explicitly save content:
+
+```
+> Remember that the new API endpoint is /v2/users
+> Store this information: Meeting scheduled for next Tuesday at 2pm
+> Save this code snippet as important for later reference
+```
+
+**Memory Attributes:**
+- **Content**: The actual information being stored
+- **Tags**: Automatic and manual categorization
+- **Importance**: AI-determined priority (1-10)
+- **Domain**: Knowledge area (programming, personal, research, etc.)
+- **Session**: Linked to conversation context
+
+### Advanced Memory Features
+
+#### AI-Powered Analysis
+```
+> Analyze my memories about API development
+> What patterns do you see in my project notes?
+> Summarize what I've learned about machine learning
+```
+
+#### Relationship Discovery
+```
+> Find memories related to this discussion
+> Show me connections between my different projects
+> What memories are similar to this topic?
+```
+
+#### Memory Management
+```
+> List all my memories from this week
+> Show memories tagged with 'important'
+> Find memories in the 'programming' domain
+```
+
+### Memory Search Types
+
+**Semantic Search** (Default):
+- AI-powered understanding of meaning and context
+- Finds relevant content even with different wording
+- Best for: General searches, concept exploration
+
+**Tag-Based Search**:
+- Exact matches on categorization tags
+- Fast and precise for known categories
+- Best for: Organized information retrieval
+
+**Hybrid Search**:
+- Combines semantic understanding with tag filtering
+- Balances relevance and precision
+- Best for: Complex queries with specific requirements
+
+### Memory Organization
+
+**Automatic Features:**
+- **Smart Tagging**: AI generates relevant tags automatically
+- **Domain Classification**: Content organized by knowledge area
+- **Importance Scoring**: AI assesses information priority
+- **Relationship Mapping**: Discovers connections between memories
+
+**Manual Control:**
+- **Custom Tags**: Add your own organizational tags
+- **Importance Override**: Adjust priority levels manually
+- **Domain Assignment**: Categorize into custom knowledge areas
+- **Memory Editing**: Update content and metadata
+
+### Privacy and Storage
+
+- **Local Storage**: All memories stored on your device
+- **No Cloud Sync**: Complete privacy and control
+- **Cross-Session Access**: Memories persist between conversations
+- **Backup**: Standard file system backup procedures apply
 
 ---
 

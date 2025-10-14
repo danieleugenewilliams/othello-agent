@@ -38,6 +38,15 @@ type ToolCall struct {
 	Arguments map[string]interface{} `json:"arguments"`
 }
 
+// ConversationContext provides context for intelligent response generation
+type ConversationContext struct {
+	History          []Message              // Recent conversation history
+	UserQuery        string                 // Current user query that triggered the tool
+	SessionType      string                 // Type of session (chat, analysis, etc.)
+	PreviousTools    []string               // Tools used recently in conversation
+	ExtractedMetadata map[string]interface{} // Key metadata extracted from tool results (e.g., memory_id, category_id)
+}
+
 // GenerateOptions contains options for generation
 type GenerateOptions struct {
 	Temperature float64 `json:"temperature,omitempty"`

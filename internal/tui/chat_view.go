@@ -46,6 +46,7 @@ type ChatView struct {
 	requestID string
 	// Conversation context for tool calling
 	conversationHistory []model.Message
+	conversationContext *model.ConversationContext // Persistent context with extracted metadata
 	currentUserMessage  string
 	availableTools      []model.ToolDefinition
 }
@@ -74,6 +75,10 @@ func NewChatViewWithAgent(styles Styles, keymap KeyMap, m model.Model, agent Age
 		model:    m,
 		agent:    agent,
 		focused:  true,
+		conversationContext: &model.ConversationContext{
+			SessionType:       "chat",
+			ExtractedMetadata: make(map[string]interface{}),
+		},
 	}
 	
 	// Add welcome message with command hints
@@ -580,9 +585,21 @@ func (v *ChatView) generateResponseWithTools(message, id string) tea.Cmd {
 			}
 		}
 		
-		// Use tool-aware generation
+		// Build messages with metadata context if available
 		messages := []model.Message{
 			{Role: "user", Content: message},
+		}
+		
+		// Inject extracted metadata as system context for the model
+		if v.conversationContext != nil && len(v.conversationContext.ExtractedMetadata) > 0 {
+			metadataContext := v.buildMetadataContextForModel()
+			if metadataContext != "" {
+				// Insert metadata as a system message before the user message
+				messages = []model.Message{
+					{Role: "system", Content: metadataContext},
+					{Role: "user", Content: message},
+				}
+			}
 		}
 		
 		response, err := v.model.ChatWithTools(ctx, messages, tools, model.GenerateOptions{
@@ -642,10 +659,20 @@ func (v *ChatView) executeToolCallsUnified(toolCalls []model.ToolCall, requestID
 		// For multiple tool calls, we'll collect all results and format them
 		var allResults []string
 
+		// Update persistent conversation context for this interaction
+		if v.conversationContext == nil {
+			v.conversationContext = &model.ConversationContext{
+				SessionType:       "chat",
+				ExtractedMetadata: make(map[string]interface{}),
+			}
+		}
+		v.conversationContext.History = v.conversationHistory
+		v.conversationContext.UserQuery = userMessage
+
 		for _, toolCall := range toolCalls {
 			if v.agent != nil {
-				// Use the unified execution method with user context
-				result, err := v.agent.ExecuteToolUnified(ctx, toolCall.Name, toolCall.Arguments, userMessage)
+				// Use the persistent conversation context (metadata accumulates across tool calls)
+				result, err := v.agent.ExecuteToolUnifiedWithContext(ctx, toolCall.Name, toolCall.Arguments, v.conversationContext)
 				if err != nil {
 					allResults = append(allResults, fmt.Sprintf("❌ Tool %s failed: %v", toolCall.Name, err))
 				} else {
@@ -741,6 +768,38 @@ func (v *ChatView) formatMemoryResult(result interface{}) string {
 // formatAnalysisResult formats analysis tool results
 func (v *ChatView) formatAnalysisResult(result interface{}) string {
 	return "Analysis completed successfully"
+}
+
+// buildMetadataContextForModel creates a system message with extracted metadata
+// This allows the model to reference IDs and other metadata in follow-up requests
+func (v *ChatView) buildMetadataContextForModel() string {
+	if v.conversationContext == nil || len(v.conversationContext.ExtractedMetadata) == 0 {
+		return ""
+	}
+
+	var contextParts []string
+	contextParts = append(contextParts, "Context from previous tool executions:")
+
+	// Include important IDs that the model might need for follow-up requests
+	if memoryID, exists := v.conversationContext.ExtractedMetadata["memory_id"]; exists {
+		contextParts = append(contextParts, fmt.Sprintf("- Last memory_id: %v", memoryID))
+	}
+	if id, exists := v.conversationContext.ExtractedMetadata["id"]; exists {
+		if _, hasMemoryID := v.conversationContext.ExtractedMetadata["memory_id"]; !hasMemoryID {
+			contextParts = append(contextParts, fmt.Sprintf("- Last id: %v", id))
+		}
+	}
+	if firstMemoryID, exists := v.conversationContext.ExtractedMetadata["first_memory_id"]; exists {
+		contextParts = append(contextParts, fmt.Sprintf("- First result memory_id: %v", firstMemoryID))
+	}
+	if firstID, exists := v.conversationContext.ExtractedMetadata["first_id"]; exists {
+		contextParts = append(contextParts, fmt.Sprintf("- First result id: %v", firstID))
+	}
+
+	if len(contextParts) > 1 { // More than just the header
+		return strings.Join(contextParts, "\n")
+	}
+	return ""
 }
 
 // formatGenericResult provides a fallback for unknown tools

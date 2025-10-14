@@ -1,9 +1,10 @@
 # Architecture Documentation
 ## Othello AI Agent
 
-**Version:** 1.0  
-**Date:** October 10, 2025  
-**Document Type:** Technical Architecture  
+**Version:** 1.1
+**Date:** October 13, 2025
+**Document Type:** Technical Architecture
+**Status:** Updated with Memory System Integration  
 
 ---
 
@@ -54,19 +55,23 @@ Othello follows a modular, layered architecture built on Go's principles of simp
 ├─────────────────────────────────────────────────────────────┤
 │  Presentation Layer                                         │
 │  ├── TUI Application (bubbletea)                           │
+│  │   ├── Chat View (conversation + memory search)         │
+│  │   ├── Server View (MCP management)                     │
+│  │   ├── Tool View (execution status)                     │
+│  │   └── History View (conversation archive)              │
 │  ├── CLI Commands (cobra)                                  │
 │  └── HTTP API (optional)                                   │
 ├─────────────────────────────────────────────────────────────┤
 │  Application Layer                                          │
-│  ├── Agent Core                                            │
-│  ├── Conversation Manager                                  │
-│  ├── Tool Execution Engine                                 │
+│  ├── Agent Core (orchestrator)                            │
+│  ├── Conversation Manager (context preservation)          │
+│  ├── Tool Execution Engine (universal processor)          │
 │  └── Configuration Manager                                 │
 ├─────────────────────────────────────────────────────────────┤
 │  Domain Layer                                               │
-│  ├── MCP Client                                            │
-│  ├── Model Interface                                       │
-│  ├── Tool Registry                                         │
+│  ├── MCP Manager (multi-server)                           │
+│  ├── Model Interface (Ollama + tool-aware)               │
+│  ├── Tool Registry (discovery + caching)                  │
 │  └── Server Registry                                       │
 ├─────────────────────────────────────────────────────────────┤
 │  Infrastructure Layer                                       │
@@ -90,11 +95,11 @@ Othello follows a modular, layered architecture built on Go's principles of simp
 │  └─────────────────┘  └─────────────────┘                 │
 │           │                                                │
 │           ▼                                                │
-│  ┌─────────────────┐  ┌─────────────────┐                 │
-│  │  MCP Server 1   │  │  MCP Server N   │                 │
-│  │  (filesystem)   │  │   (database)    │                 │
-│  │                 │  │                 │                 │
-│  └─────────────────┘  └─────────────────┘                 │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐ │
+│  │  MCP Server 1   │  │local-memory MCP │  │ MCP Server N│ │
+│  │  (filesystem)   │  │ (memory system) │  │ (database)  │ │
+│  │                 │  │                 │  │             │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────┘ │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │  Local Storage                                      │   │
@@ -292,6 +297,31 @@ type Conversation struct {
 }
 ```
 
+#### 6. Storage Manager (`internal/storage/`)
+
+**Responsibility**: Manages local data persistence for conversations and configuration.
+
+```go
+type Manager interface {
+    SaveConversation(ctx context.Context, conv *Conversation) error
+    LoadConversation(ctx context.Context, id string) (*Conversation, error)
+    LoadConversations(ctx context.Context, limit int) ([]*Conversation, error)
+    DeleteConversation(ctx context.Context, id string) error
+}
+
+type Conversation struct {
+    ID       string    `json:"id"`
+    Messages []Message `json:"messages"`
+    Created  time.Time `json:"created"`
+    Updated  time.Time `json:"updated"`
+}
+```
+
+**Implementation**:
+- **SQLite Backend**: Local database storage with automatic migrations
+- **File Storage**: Configuration files and cached data
+- **Transaction Support**: ACID compliance for data integrity
+
 ---
 
 ## Data Flow
@@ -366,6 +396,56 @@ flowchart TD
     I -->|No| K[Report Error & Exit]
     J --> L[Application Ready]
 ```
+
+---
+
+## MCP Servers
+
+Othello integrates with external MCP servers to provide extensible functionality. These servers run as separate processes and communicate with the agent via the Model Context Protocol.
+
+### Core MCP Servers
+
+#### local-memory MCP Server
+
+**Purpose**: Advanced knowledge management and memory capabilities
+
+**Capabilities**:
+- **Semantic Search**: AI-powered search across stored memories
+- **Memory Storage**: Persistent storage with tags, importance levels, and domains
+- **AI Analysis**: Question answering and pattern analysis over memory sets
+- **Relationship Mapping**: Automatic discovery of connections between memories
+- **Session Management**: Cross-session memory access and organization
+- **Categorization**: AI-powered automatic categorization of new memories
+
+**Tool Interfaces**:
+```go
+// Available through MCP tool calls
+mcp__local-memory__search(query, search_type, use_ai, tags, limit)
+mcp__local-memory__store_memory(content, importance, tags, domain)
+mcp__local-memory__analysis(analysis_type, question, limit)
+mcp__local-memory__relationships(relationship_type, memory_id)
+mcp__local-memory__categories(categories_type, name, description)
+```
+
+**Architecture Role**:
+- **External Process**: Runs independently of Othello core
+- **STDIO Communication**: JSON-RPC 2.0 over STDIO transport
+- **Tool Provider**: Registers memory tools with Othello's tool registry
+- **State Management**: Maintains its own memory database separate from Othello
+
+**Integration Benefits**:
+- **Modularity**: Memory system can be updated independently
+- **Extensibility**: Additional memory features without core changes
+- **Process Isolation**: Memory system failures don't crash the agent
+- **Tool Consistency**: Memory operations follow standard MCP patterns
+
+### Other MCP Servers
+
+The architecture supports additional MCP servers for:
+- **File Operations**: Filesystem access and manipulation
+- **Database Access**: External database integration
+- **Web Services**: API integrations and web scraping
+- **Code Tools**: Development environment integration
 
 ---
 

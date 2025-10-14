@@ -6,12 +6,58 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Othello is a Go-based AI agent that integrates local language models (via Ollama) with Model Context Protocol (MCP) servers to provide intelligent assistance through both terminal UI and CLI interfaces. The agent enables tool discovery, execution, and conversation management in a local-first architecture.
 
+## Local Memory
+
+Proactively use local-memory MCP to store, retrieve, update, and analyze memories to maintain context and build expertise over time. Store key insights including lessons learned, architectural decisions, development strategies, and project outcomes. Use semantic search and relationship mapping to find relevant memories across all projects and sessions.
+
+### v1.1.0 Unified Tool Architecture
+
+**IMPORTANT**: v1.1.0 introduces 8 unified MCP tools that replace the previous 20+ individual tools. Each unified tool uses operation types to provide multiple functionalities:
+
+1. **`store_memory`** - Store new memories with metadata
+2. **`search`** - Unified search with operation types:
+   - `search_type: "semantic"` - AI-powered semantic search
+   - `search_type: "tags"` - Tag-based filtering
+   - `search_type: "date_range"` - Date range filtering
+   - `search_type: "hybrid"` - Combined search capabilities
+3. **`analysis`** - Unified analysis with operation types:
+   - `analysis_type: "question"` - AI-powered Q&A
+   - `analysis_type: "summarize"` - Memory summarization
+   - `analysis_type: "analyze"` - Pattern analysis
+   - `analysis_type: "temporal_patterns"` - Learning progression tracking
+4. **`relationships`** - Unified relationships with operation types:
+   - `relationship_type: "find_related"` - Find related memories
+   - `relationship_type: "discover"` - AI-powered relationship discovery
+   - `relationship_type: "create"` - Create memory relationships
+   - `relationship_type: "map_graph"` - Generate relationship graphs
+5. **`categories`** - Unified categorization with operation types:
+   - `categories_type: "list"` - List all categories
+   - `categories_type: "create"` - Create new categories
+   - `categories_type: "categorize"` - AI-powered memory categorization
+6. **`domains`** - Unified domain management with operation types:
+   - `domains_type: "list"` - List all domains
+   - `domains_type: "create"` - Create new domains
+   - `domains_type: "stats"` - Domain statistics
+7. **`sessions`** - Unified session management with operation types:
+   - `sessions_type: "list"` - List all sessions
+   - `sessions_type: "stats"` - Session statistics
+8. **`stats`** - Unified statistics with operation types:
+   - `stats_type: "session"` - Session statistics
+   - `stats_type: "domain"` - Domain statistics
+   - `stats_type: "category"` - Category statistics
+
+**Key Benefits**:
+- **Token Optimization**: Response format controls (`detailed`, `concise`, `ids_only`, `summary`)
+- **Session Filtering**: `session_filter_mode` parameter for cross-session access
+- **Simplified Interface**: Fewer tools to manage with more functionality
+- **Backwards Compatibility**: Legacy individual tools still supported but deprecated
+
 ## Development Commands
 
 ### Building and Running
 ```bash
 # Build the application
-go build -o othello cmd/othello/main.go
+go build -o ./bin/othello cmd/othello/main.go
 
 # Run the interactive TUI
 ./othello

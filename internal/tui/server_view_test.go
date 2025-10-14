@@ -50,6 +50,11 @@ func (m *MockAgent) ExecuteToolUnified(ctx context.Context, toolName string, par
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockAgent) ExecuteToolUnifiedWithContext(ctx context.Context, toolName string, params map[string]interface{}, convContext *model.ConversationContext) (string, error) {
+	args := m.Called(ctx, toolName, params, convContext)
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockAgent) ProcessToolResult(ctx context.Context, toolName string, result *mcp.ExecuteResult, userQuery string) (string, error) {
 	args := m.Called(ctx, toolName, result, userQuery)
 	return args.String(0), args.Error(1)

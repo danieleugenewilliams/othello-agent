@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/danieleugenewilliams/othello-agent/internal/mcp"
+	"github.com/danieleugenewilliams/othello-agent/internal/model"
 )
 
 // ToolResultProcessor processes raw tool results into user-friendly summaries
@@ -15,6 +16,7 @@ type ToolResultProcessor struct {
 	// Can add configuration here later (e.g., verbosity level)
 	Logger *log.Logger
 }
+
 
 // keys returns the keys of a map for logging purposes
 func keys(m map[string]interface{}) []string {
@@ -36,26 +38,43 @@ func (p *ToolResultProcessor) logf(format string, args ...interface{}) {
 
 // ProcessToolResult takes a raw MCP tool result and presents it according to the MCP specification
 // This is completely universal and works with any MCP server by respecting the Content type system
+// Backward compatible version without conversation context
 func (p *ToolResultProcessor) ProcessToolResult(ctx context.Context, toolName string, rawResult interface{}, userQuery string) (string, error) {
-	p.logf("[PROCESSOR] Processing MCP tool result for: '%s'", toolName)
+	// Use the enhanced version with empty context for backward compatibility
+	context := &model.ConversationContext{
+		UserQuery:   userQuery,
+		SessionType: "chat",
+	}
+	return p.ProcessToolResultWithContext(ctx, toolName, rawResult, context)
+}
+
+// ProcessToolResultWithContext processes tool results with conversation context for intelligent responses
+func (p *ToolResultProcessor) ProcessToolResultWithContext(ctx context.Context, toolName string, rawResult interface{}, convContext *model.ConversationContext) (string, error) {
+	p.logf("[PROCESSOR] Processing MCP tool result for: '%s' with conversation context", toolName)
 	p.logf("[PROCESSOR] Raw result type: %T", rawResult)
+	p.logf("[PROCESSOR] Conversation history length: %d", len(convContext.History))
 
 	// Handle nil result
 	if rawResult == nil {
 		p.logf("[PROCESSOR] Raw result is nil")
-		return "The tool returned no results.", nil
+		return p.generateContextualResponse("The tool returned no results.", convContext), nil
 	}
+
+	// Extract metadata from the tool result before formatting
+	p.extractAndStoreMetadata(rawResult, convContext)
 
 	// The rawResult should be a ToolResult from the MCP server
 	// Try to extract it as a ToolResult struct or map representation
 	if toolResult := p.extractMCPToolResult(rawResult); toolResult != nil {
 		p.logf("[PROCESSOR] Successfully extracted MCP ToolResult with %d content items", 0)
-		return p.formatMCPContent(toolResult), nil
+		baseResult := p.formatMCPContent(toolResult)
+		return p.generateContextualResponse(baseResult, convContext), nil
 	}
 
 	// Fallback: treat as raw content if not in MCP ToolResult format
 	p.logf("[PROCESSOR] Not an MCP ToolResult format, using fallback presentation")
-	return p.formatFallbackContent(rawResult), nil
+	baseResult := p.formatFallbackContent(rawResult)
+	return p.generateContextualResponse(baseResult, convContext), nil
 }
 
 // checkForError checks if result contains an error
@@ -352,17 +371,23 @@ func (p *ToolResultProcessor) detectContentType(result map[string]interface{}) s
 	p.logf("[PROCESSOR] Detecting content type from keys: %v", keys(result))
 
 	// Search-type results (lists of items with content/memories)
-	if results, hasResults := result["results"].([]interface{}); hasResults && len(results) > 0 {
-		// Check if first result looks like a memory/search result
-		if firstResult, ok := results[0].(map[string]interface{}); ok {
-			if _, hasContent := firstResult["content"]; hasContent {
-				p.logf("[PROCESSOR] Detected search-type result (results array with content)")
-				return "search"
+	if results, hasResults := result["results"].([]interface{}); hasResults {
+		if len(results) > 0 {
+			// Check if first result looks like a memory/search result
+			if firstResult, ok := results[0].(map[string]interface{}); ok {
+				if _, hasContent := firstResult["content"]; hasContent {
+					p.logf("[PROCESSOR] Detected search-type result (results array with content)")
+					return "search"
+				}
+				if _, hasSummary := firstResult["summary"]; hasSummary {
+					p.logf("[PROCESSOR] Detected search-type result (results array with summary)")
+					return "search"
+				}
 			}
-			if _, hasSummary := firstResult["summary"]; hasSummary {
-				p.logf("[PROCESSOR] Detected search-type result (results array with summary)")
-				return "search"
-			}
+		} else {
+			// Empty results array still counts as a search result
+			p.logf("[PROCESSOR] Detected search-type result (empty results array)")
+			return "search"
 		}
 	}
 
@@ -581,9 +606,23 @@ func (p *ToolResultProcessor) formatMCPContent(contents interface{}) string {
 
 		switch contentType {
 		case "text":
-			// Text content: display as-is (server has already formatted it)
+			// Text content: check if it's actually JSON that should be parsed
 			if contentText != "" {
-				output.WriteString(contentText)
+				// Try to detect if this is JSON masquerading as text
+				trimmed := strings.TrimSpace(contentText)
+				if (strings.HasPrefix(trimmed, "{") && strings.HasSuffix(trimmed, "}")) ||
+				   (strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]")) {
+					// Looks like JSON, try to parse and format it intelligently
+					if parsed := p.tryParseAndFormatJSON(contentText); parsed != "" {
+						output.WriteString(parsed)
+					} else {
+						// Not valid JSON or failed to parse, display as-is
+						output.WriteString(contentText)
+					}
+				} else {
+					// Regular text, display as-is
+					output.WriteString(contentText)
+				}
 			} else {
 				output.WriteString("[Empty text content]")
 			}
@@ -673,6 +712,32 @@ func (p *ToolResultProcessor) formatFallbackContent(rawResult interface{}) strin
 
 // formatMapContent formats a map in a user-friendly way
 func (p *ToolResultProcessor) formatMapContent(result map[string]interface{}) string {
+	// First, try to detect content type and use specialized formatters
+	contentType := p.detectContentType(result)
+	p.logf("[MAP-FORMAT] Detected content type: %s", contentType)
+	
+	switch contentType {
+	case "search":
+		return p.processSearchResults(result, "")
+	case "store_memory":
+		return p.processStoreMemoryResult(result)
+	case "analysis":
+		return p.processAnalysisResult(result)
+	case "stats":
+		return p.processStatsResult(result)
+	case "relationships":
+		return p.processRelationshipsResult(result)
+	case "domains", "categories", "sessions":
+		return p.processListResult(result, contentType)
+	}
+	
+	// If no specialized formatter, use generic formatting
+	
+	// Check for errors first
+	if errMsg, _ := p.checkForError(result); errMsg != "" {
+		return errMsg
+	}
+	
 	// Look for common fields that indicate success/failure
 	if success, ok := result["success"].(bool); ok {
 		if success {
@@ -740,6 +805,31 @@ func (p *ToolResultProcessor) formatArrayContent(result []interface{}) string {
 	return output.String()
 }
 
+// tryParseAndFormatJSON attempts to parse JSON and format it intelligently for user display
+// Returns formatted string if successful, empty string if not JSON or parsing fails
+func (p *ToolResultProcessor) tryParseAndFormatJSON(jsonStr string) string {
+	var parsed interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &parsed); err != nil {
+		p.logf("[JSON-PARSE] Failed to parse as JSON: %v", err)
+		return ""
+	}
+	
+	p.logf("[JSON-PARSE] Successfully parsed JSON, type: %T", parsed)
+	
+	// If it's a map, try to format it intelligently
+	if resultMap, ok := parsed.(map[string]interface{}); ok {
+		return p.formatMapContent(resultMap)
+	}
+	
+	// If it's an array, format as list
+	if resultArray, ok := parsed.([]interface{}); ok {
+		return p.formatArrayContent(resultArray)
+	}
+	
+	// Fallback to pretty-printed JSON
+	return p.prettyPrintJSON(jsonStr)
+}
+
 // prettyPrintJSON attempts to pretty-print JSON, returns empty string if invalid
 func (p *ToolResultProcessor) prettyPrintJSON(jsonStr string) string {
 	var parsed interface{}
@@ -751,4 +841,314 @@ func (p *ToolResultProcessor) prettyPrintJSON(jsonStr string) string {
 		return string(prettyBytes)
 	}
 	return ""
+}
+
+// generateContextualResponse enhances the base result with conversation context and follow-up suggestions
+func (p *ToolResultProcessor) generateContextualResponse(baseResult string, convContext *model.ConversationContext) string {
+	if convContext == nil {
+		return baseResult
+	}
+
+	p.logf("[PROCESSOR] Generating contextual response for user query: %s", convContext.UserQuery)
+
+	var response strings.Builder
+	response.WriteString(baseResult)
+
+	// Note: We extract metadata and store it in convContext.ExtractedMetadata
+	// but we DON'T show it in the user response. The metadata is available
+	// in conversation history for the model to reference when needed.
+	// This keeps responses clean while maintaining context for follow-up queries.
+
+	// Add contextual follow-up based on conversation history and result type
+	followUp := p.generateFollowUpSuggestions(baseResult, convContext)
+	if followUp != "" {
+		response.WriteString("\n\n")
+		response.WriteString(followUp)
+	}
+
+	return response.String()
+}
+
+// generateFollowUpSuggestions provides intelligent follow-up suggestions based on context
+func (p *ToolResultProcessor) generateFollowUpSuggestions(result string, convContext *model.ConversationContext) string {
+	// Analyze the result and conversation to suggest relevant follow-ups
+	queryLower := strings.ToLower(convContext.UserQuery)
+
+	var suggestions []string
+
+	// Search result follow-ups
+	if strings.Contains(result, "I found") && strings.Contains(result, "memor") {
+		// This is a search result
+		if !p.hasRecentToolUsage(convContext.PreviousTools, "store_memory") {
+			suggestions = append(suggestions, "💡 Would you like me to store any new insights from this search?")
+		}
+		if strings.Contains(queryLower, "relate") || strings.Contains(queryLower, "connect") {
+			suggestions = append(suggestions, "🔗 I can also show you relationships between these memories.")
+		}
+		if len(convContext.History) > 4 { // Longer conversation
+			suggestions = append(suggestions, "📊 Want me to analyze patterns across your memories?")
+		}
+	}
+
+	// Storage result follow-ups
+	if strings.Contains(result, "stored") && strings.Contains(result, "memory") {
+		suggestions = append(suggestions, "🔍 You can search for this memory later or find related ones.")
+		if p.hasRecentSearches(convContext.History) {
+			suggestions = append(suggestions, "🔗 I can connect this to your recent searches if helpful.")
+		}
+	}
+
+	// Analysis result follow-ups
+	if strings.Contains(result, "pattern") || strings.Contains(result, "analys") {
+		suggestions = append(suggestions, "💾 Would you like me to remember these insights for future reference?")
+	}
+
+	// Context-aware suggestions based on conversation flow
+	if len(convContext.History) > 0 {
+		lastMessage := convContext.History[len(convContext.History)-1]
+		if lastMessage.Role == "user" && strings.Contains(strings.ToLower(lastMessage.Content), "help") {
+			suggestions = append(suggestions, "ℹ️ Need more specific guidance? Just ask!")
+		}
+	}
+
+	// Limit to 2 suggestions to avoid overwhelming
+	if len(suggestions) > 2 {
+		suggestions = suggestions[:2]
+	}
+
+	if len(suggestions) > 0 {
+		return strings.Join(suggestions, "\n")
+	}
+
+	return ""
+}
+
+// hasRecentToolUsage checks if a tool was used recently in the conversation
+func (p *ToolResultProcessor) hasRecentToolUsage(previousTools []string, toolName string) bool {
+	for _, tool := range previousTools {
+		if strings.Contains(strings.ToLower(tool), strings.ToLower(toolName)) {
+			return true
+		}
+	}
+	return false
+}
+
+// generateMetadataContext creates a natural language description of extracted metadata
+// This makes important IDs and values visible to the model for follow-up requests
+func (p *ToolResultProcessor) generateMetadataContext(convContext *model.ConversationContext) string {
+	if convContext == nil || len(convContext.ExtractedMetadata) == 0 {
+		return ""
+	}
+
+	p.logf("[METADATA-CONTEXT] Generating context from %d metadata fields", len(convContext.ExtractedMetadata))
+
+	var contextParts []string
+
+	// Memory ID is the most important for follow-up
+	if memoryID, exists := convContext.ExtractedMetadata["memory_id"]; exists {
+		contextParts = append(contextParts, fmt.Sprintf("(Memory ID: %v)", memoryID))
+		p.logf("[METADATA-CONTEXT] Including memory_id: %v", memoryID)
+	}
+
+	// Also check for generic ID field
+	if id, exists := convContext.ExtractedMetadata["id"]; exists {
+		if _, hasMemoryID := convContext.ExtractedMetadata["memory_id"]; !hasMemoryID {
+			contextParts = append(contextParts, fmt.Sprintf("(ID: %v)", id))
+			p.logf("[METADATA-CONTEXT] Including id: %v", id)
+		}
+	}
+
+	// Category and domain for context
+	if categoryID, exists := convContext.ExtractedMetadata["category_id"]; exists {
+		contextParts = append(contextParts, fmt.Sprintf("Category: %v", categoryID))
+	}
+	if domain, exists := convContext.ExtractedMetadata["domain"]; exists {
+		contextParts = append(contextParts, fmt.Sprintf("Domain: %v", domain))
+	}
+
+	// First result ID from searches
+	if firstMemoryID, exists := convContext.ExtractedMetadata["first_memory_id"]; exists {
+		contextParts = append(contextParts, fmt.Sprintf("(First result ID: %v)", firstMemoryID))
+		p.logf("[METADATA-CONTEXT] Including first_memory_id: %v", firstMemoryID)
+	} else if firstID, exists := convContext.ExtractedMetadata["first_id"]; exists {
+		contextParts = append(contextParts, fmt.Sprintf("(First result ID: %v)", firstID))
+		p.logf("[METADATA-CONTEXT] Including first_id: %v", firstID)
+	}
+
+	if len(contextParts) > 0 {
+		result := strings.Join(contextParts, " • ")
+		p.logf("[METADATA-CONTEXT] Generated context: %s", result)
+		return result
+	}
+
+	return ""
+}
+
+// hasRecentSearches checks if the user has performed searches recently
+func (p *ToolResultProcessor) hasRecentSearches(history []model.Message) bool {
+	// Look at the last few messages for search-related activity
+	searchTerms := []string{"search", "find", "look", "show"}
+	for i := len(history) - 1; i >= 0 && i >= len(history)-4; i-- {
+		if history[i].Role == "user" {
+			content := strings.ToLower(history[i].Content)
+			for _, term := range searchTerms {
+				if strings.Contains(content, term) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// extractAndStoreMetadata extracts important metadata from tool results
+// This makes metadata like memory_id, category_id available for follow-up requests
+func (p *ToolResultProcessor) extractAndStoreMetadata(rawResult interface{}, convContext *model.ConversationContext) {
+	if convContext == nil {
+		return
+	}
+
+	// Initialize metadata map if needed
+	if convContext.ExtractedMetadata == nil {
+		convContext.ExtractedMetadata = make(map[string]interface{})
+	}
+
+	// Try to extract metadata from MCP ToolResult format
+	if toolResult, ok := rawResult.(*mcp.ToolResult); ok {
+		p.extractMetadataFromMCPResult(toolResult, convContext)
+		return
+	}
+
+	// Try to extract from map format
+	if resultMap, ok := rawResult.(map[string]interface{}); ok {
+		p.extractMetadataFromMap(resultMap, convContext)
+		return
+	}
+
+	p.logf("[METADATA] Unable to extract metadata from result type: %T", rawResult)
+}
+
+// extractMetadataFromMCPResult extracts metadata from MCP ToolResult
+func (p *ToolResultProcessor) extractMetadataFromMCPResult(toolResult *mcp.ToolResult, convContext *model.ConversationContext) {
+	// MCP results have content array - try to parse JSON from text content
+	for _, content := range toolResult.Content {
+		if content.Type == "text" && content.Text != "" {
+			// Try to parse the text as JSON
+			trimmed := strings.TrimSpace(content.Text)
+			if (strings.HasPrefix(trimmed, "{") && strings.HasSuffix(trimmed, "}")) ||
+			   (strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]")) {
+				var parsed map[string]interface{}
+				if err := json.Unmarshal([]byte(trimmed), &parsed); err == nil {
+					p.extractMetadataFromMap(parsed, convContext)
+					return
+				}
+			}
+		}
+	}
+}
+
+// extractMetadataFromMap extracts metadata from a map result
+func (p *ToolResultProcessor) extractMetadataFromMap(resultMap map[string]interface{}, convContext *model.ConversationContext) {
+	// Priority metadata keys to extract (these are most useful for follow-up requests)
+	priorityKeys := []string{
+		"memory_id", "id",
+		"category_id", "domain", "session_id", "relationship_id",
+		"count", "total", "memory_count", "domain_count", "category_count",
+	}
+
+	extracted := 0
+	
+	// Extract priority keys first
+	for _, key := range priorityKeys {
+		if value, exists := resultMap[key]; exists && value != nil {
+			convContext.ExtractedMetadata[key] = value
+			extracted++
+			p.logf("[METADATA] Extracted %s = %v", key, value)
+		}
+	}
+
+	// Then extract any other ID-like fields (universal approach for any MCP server)
+	for key, value := range resultMap {
+		if value == nil {
+			continue
+		}
+		
+		// Skip if already extracted
+		if _, exists := convContext.ExtractedMetadata[key]; exists {
+			continue
+		}
+		
+		// Extract fields that look like identifiers or important metadata
+		keyLower := strings.ToLower(key)
+		if strings.HasSuffix(keyLower, "_id") || 
+		   strings.HasSuffix(keyLower, "id") || 
+		   strings.HasSuffix(keyLower, "_uuid") ||
+		   strings.HasSuffix(keyLower, "_key") ||
+		   strings.HasSuffix(keyLower, "_ref") ||
+		   strings.HasSuffix(keyLower, "_handle") ||
+		   strings.HasSuffix(keyLower, "_type") ||
+		   keyLower == "name" ||
+		   keyLower == "type" ||
+		   keyLower == "status" {
+			// Only extract simple types (strings, numbers, bools)
+			switch value.(type) {
+			case string, int, int64, float64, bool:
+				convContext.ExtractedMetadata[key] = value
+				extracted++
+				p.logf("[METADATA] Extracted %s = %v (identifier-like field)", key, value)
+			}
+		}
+	}
+
+	// Also check nested results array for metadata
+	if results, ok := resultMap["results"].([]interface{}); ok && len(results) > 0 {
+		// Extract IDs from the first result
+		if firstResult, ok := results[0].(map[string]interface{}); ok {
+			// Extract priority keys with "first_" prefix
+			for _, key := range priorityKeys {
+				if value, exists := firstResult[key]; exists && value != nil {
+					prefixedKey := "first_" + key
+					convContext.ExtractedMetadata[prefixedKey] = value
+					extracted++
+					p.logf("[METADATA] Extracted %s = %v", prefixedKey, value)
+				}
+			}
+			
+			// Extract other ID-like fields from first result
+			for key, value := range firstResult {
+				if value == nil {
+					continue
+				}
+				
+				prefixedKey := "first_" + key
+				if _, exists := convContext.ExtractedMetadata[prefixedKey]; exists {
+					continue
+				}
+				
+				// Apply the same universal extraction logic as the main loop
+				keyLower := strings.ToLower(key)
+				if strings.HasSuffix(keyLower, "_id") || 
+				   strings.HasSuffix(keyLower, "id") || 
+				   strings.HasSuffix(keyLower, "_uuid") ||
+				   strings.HasSuffix(keyLower, "_key") ||
+				   strings.HasSuffix(keyLower, "_ref") ||
+				   strings.HasSuffix(keyLower, "_handle") ||
+				   strings.HasSuffix(keyLower, "_type") ||
+				   keyLower == "name" ||
+				   keyLower == "type" ||
+				   keyLower == "status" {
+					switch value.(type) {
+					case string, int, int64, float64, bool:
+						convContext.ExtractedMetadata[prefixedKey] = value
+						extracted++
+						p.logf("[METADATA] Extracted %s = %v (from first result)", prefixedKey, value)
+					}
+				}
+			}
+		}
+	}
+
+	if extracted > 0 {
+		p.logf("[METADATA] Successfully extracted %d metadata fields", extracted)
+	}
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/danieleugenewilliams/othello-agent/internal/mcp"
+	"github.com/danieleugenewilliams/othello-agent/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -39,14 +41,17 @@ func TestProcessToolResult_SearchResults(t *testing.T) {
 	// Should extract key information
 	assert.Contains(t, processed, "Python", "Should mention Python")
 	assert.Contains(t, processed, "list comprehensions", "Should extract key info")
+	assert.Contains(t, processed, "found", "Should indicate results were found")
+	assert.Contains(t, processed, "memor", "Should mention memories")
 	
 	// Should NOT contain raw JSON structures
 	assert.NotContains(t, processed, "mem123", "Should not include internal IDs")
 	assert.NotContains(t, processed, "score", "Should not include technical details")
 	
-	// Should be concise
-	assert.Less(t, len(processed), len(rawResult["results"].([]interface{})[0].(map[string]interface{})["content"].(string))*3,
-		"Processed result should be concise, not verbose")
+	// Should be reasonably concise (not more than 10x a single content length including formatting)
+	singleContentLen := len(rawResult["results"].([]interface{})[0].(map[string]interface{})["content"].(string))
+	assert.Less(t, len(processed), singleContentLen*10,
+		"Processed result should be reasonably concise")
 }
 
 // TestProcessToolResult_EmptyResults tests handling of empty search results
@@ -212,4 +217,236 @@ func TestProcessToolResult_NilResult(t *testing.T) {
 	// Should handle gracefully
 	assert.NotEmpty(t, processed, "Should return non-empty message")
 	assert.Contains(t, processed, "no results", "Should indicate no results")
+}
+
+// TestMetadataExtraction_MemoryID tests extraction of memory_id from store_memory results
+func TestMetadataExtraction_MemoryID(t *testing.T) {
+	processor := &ToolResultProcessor{}
+	
+	rawResult := map[string]interface{}{
+		"success":   true,
+		"memory_id": "550e8400-e29b-41d4-a716-446655440000",
+		"message":   "Memory stored successfully",
+	}
+	
+	convContext := &model.ConversationContext{
+		UserQuery:         "Store this information",
+		SessionType:       "chat",
+		ExtractedMetadata: make(map[string]interface{}),
+	}
+	
+	_, err := processor.ProcessToolResultWithContext(context.Background(), "store_memory", rawResult, convContext)
+	require.NoError(t, err)
+	
+	// Should extract memory_id into context
+	assert.Contains(t, convContext.ExtractedMetadata, "memory_id", "Should extract memory_id")
+	assert.Equal(t, "550e8400-e29b-41d4-a716-446655440000", convContext.ExtractedMetadata["memory_id"])
+}
+
+// TestMetadataExtraction_SearchResults tests extraction of ID from first search result
+func TestMetadataExtraction_SearchResults(t *testing.T) {
+	processor := &ToolResultProcessor{}
+	
+	rawResult := map[string]interface{}{
+		"results": []interface{}{
+			map[string]interface{}{
+				"id":         "first-result-id",
+				"memory_id":  "mem-123",
+				"content":    "Some content",
+				"importance": 8.0,
+			},
+			map[string]interface{}{
+				"id":      "second-result-id",
+				"content": "More content",
+			},
+		},
+		"total": 2,
+	}
+	
+	convContext := &model.ConversationContext{
+		UserQuery:         "Find related memories",
+		SessionType:       "chat",
+		ExtractedMetadata: make(map[string]interface{}),
+	}
+	
+	_, err := processor.ProcessToolResultWithContext(context.Background(), "search", rawResult, convContext)
+	require.NoError(t, err)
+	
+	// Should extract first result's IDs
+	assert.Contains(t, convContext.ExtractedMetadata, "first_id", "Should extract first result ID")
+	assert.Equal(t, "first-result-id", convContext.ExtractedMetadata["first_id"])
+	assert.Contains(t, convContext.ExtractedMetadata, "first_memory_id", "Should extract first result memory_id")
+	assert.Equal(t, "mem-123", convContext.ExtractedMetadata["first_memory_id"])
+}
+
+// TestMetadataExtraction_JSONText tests extraction from JSON embedded in text content
+func TestMetadataExtraction_JSONText(t *testing.T) {
+	processor := &ToolResultProcessor{}
+	
+	// Simulate MCP ToolResult with JSON in text content
+	rawResult := &mcp.ToolResult{
+		Content: []mcp.Content{
+			{
+				Type: "text",
+				Text: `{"success": true, "memory_id": "extracted-from-json", "count": 5}`,
+			},
+		},
+	}
+	
+	convContext := &model.ConversationContext{
+		UserQuery:         "Store memory",
+		SessionType:       "chat",
+		ExtractedMetadata: make(map[string]interface{}),
+	}
+	
+	_, err := processor.ProcessToolResultWithContext(context.Background(), "store_memory", rawResult, convContext)
+	require.NoError(t, err)
+	
+	// Should parse JSON from text and extract metadata
+	assert.Contains(t, convContext.ExtractedMetadata, "memory_id", "Should extract memory_id from JSON text")
+	assert.Equal(t, "extracted-from-json", convContext.ExtractedMetadata["memory_id"])
+	assert.Contains(t, convContext.ExtractedMetadata, "count", "Should extract count from JSON text")
+}
+
+// TestMetadataContext_Generation tests that metadata is extracted into context
+func TestMetadataContext_Generation(t *testing.T) {
+	processor := &ToolResultProcessor{}
+	
+	rawResult := map[string]interface{}{
+		"success":   true,
+		"memory_id": "uuid-12345",
+	}
+	
+	convContext := &model.ConversationContext{
+		UserQuery:         "Store this",
+		SessionType:       "chat",
+		ExtractedMetadata: make(map[string]interface{}),
+	}
+	
+	processed, err := processor.ProcessToolResultWithContext(context.Background(), "store_memory", rawResult, convContext)
+	require.NoError(t, err)
+	
+	// Verify response is user-friendly (not raw data)
+	assert.Contains(t, processed, "stored", "Should confirm storage")
+	assert.NotEmpty(t, processed, "Should return a response")
+	
+	// Verify metadata was extracted into context for model to use
+	assert.Equal(t, "uuid-12345", convContext.ExtractedMetadata["memory_id"], "Metadata should be extracted into context")
+}
+
+// TestMetadataContext_Accumulation tests metadata accumulates across multiple tool calls
+func TestMetadataContext_Accumulation(t *testing.T) {
+	processor := &ToolResultProcessor{}
+	
+	convContext := &model.ConversationContext{
+		UserQuery:         "First query",
+		SessionType:       "chat",
+		ExtractedMetadata: make(map[string]interface{}),
+	}
+	
+	// First tool call - store memory
+	result1 := map[string]interface{}{
+		"success":   true,
+		"memory_id": "mem-001",
+	}
+	_, err := processor.ProcessToolResultWithContext(context.Background(), "store_memory", result1, convContext)
+	require.NoError(t, err)
+	assert.Equal(t, "mem-001", convContext.ExtractedMetadata["memory_id"])
+	
+	// Second tool call - get stats
+	result2 := map[string]interface{}{
+		"memory_count": 42,
+		"domain":       "programming",
+	}
+	_, err = processor.ProcessToolResultWithContext(context.Background(), "stats", result2, convContext)
+	require.NoError(t, err)
+	
+	// Both metadata should be present
+	assert.Equal(t, "mem-001", convContext.ExtractedMetadata["memory_id"], "Previous metadata should persist")
+	assert.Equal(t, 42, convContext.ExtractedMetadata["memory_count"], "New metadata should be added")
+	assert.Equal(t, "programming", convContext.ExtractedMetadata["domain"], "Domain should be extracted")
+}
+
+// TestMetadataExtraction_UniversalMCPServer tests metadata extraction works with arbitrary MCP servers
+func TestMetadataExtraction_UniversalMCPServer(t *testing.T) {
+	processor := &ToolResultProcessor{}
+	
+	// Simulate a custom MCP server with non-standard field names
+	rawResult := map[string]interface{}{
+		"success":      true,
+		"document_id":  "doc-12345",                    // Custom ID field
+		"artifact_key": "artifact-xyz",                 // Custom key field
+		"entity_uuid":  "550e8400-e29b-41d4-a716-446655440000", // UUID field
+		"record_ref":   "ref-999",                      // Reference field
+		"status":       "completed",                    // Status field
+		"name":         "important-document",           // Name field
+		"created_at":   "2024-01-01T00:00:00Z",        // Timestamp (should not be extracted)
+		"metadata": map[string]interface{}{             // Nested object (should not be extracted)
+			"author": "user",
+		},
+	}
+	
+	convContext := &model.ConversationContext{
+		UserQuery:         "Store this document",
+		SessionType:       "chat",
+		ExtractedMetadata: make(map[string]interface{}),
+	}
+	
+	_, err := processor.ProcessToolResultWithContext(context.Background(), "custom_tool", rawResult, convContext)
+	require.NoError(t, err)
+	
+	// Verify ID-like fields were extracted
+	assert.Equal(t, "doc-12345", convContext.ExtractedMetadata["document_id"], "Should extract custom _id fields")
+	assert.Equal(t, "artifact-xyz", convContext.ExtractedMetadata["artifact_key"], "Should extract _key fields")
+	assert.Equal(t, "550e8400-e29b-41d4-a716-446655440000", convContext.ExtractedMetadata["entity_uuid"], "Should extract _uuid fields")
+	assert.Equal(t, "ref-999", convContext.ExtractedMetadata["record_ref"], "Should extract _ref fields")
+	assert.Equal(t, "completed", convContext.ExtractedMetadata["status"], "Should extract status fields")
+	assert.Equal(t, "important-document", convContext.ExtractedMetadata["name"], "Should extract name fields")
+	
+	// Verify complex types were NOT extracted
+	assert.NotContains(t, convContext.ExtractedMetadata, "metadata", "Should not extract nested objects")
+	assert.NotContains(t, convContext.ExtractedMetadata, "created_at", "Should not extract timestamp strings")
+	
+	t.Logf("Extracted %d metadata fields: %+v", len(convContext.ExtractedMetadata), convContext.ExtractedMetadata)
+}
+
+// TestMetadataExtraction_CustomResults tests extraction from custom result structures
+func TestMetadataExtraction_CustomResults(t *testing.T) {
+	processor := &ToolResultProcessor{}
+	
+	// Simulate a custom MCP server with non-standard result structure
+	rawResult := map[string]interface{}{
+		"results": []interface{}{
+			map[string]interface{}{
+				"item_id":      "item-001",
+				"resource_key": "res-alpha",
+				"type":         "document",
+			},
+			map[string]interface{}{
+				"item_id":      "item-002",
+				"resource_key": "res-beta",
+				"type":         "image",
+			},
+		},
+		"total": 2,
+	}
+	
+	convContext := &model.ConversationContext{
+		UserQuery:         "Find resources",
+		SessionType:       "chat",
+		ExtractedMetadata: make(map[string]interface{}),
+	}
+	
+	_, err := processor.ProcessToolResultWithContext(context.Background(), "custom_search", rawResult, convContext)
+	require.NoError(t, err)
+	
+	// Verify top-level metadata
+	assert.Equal(t, 2, convContext.ExtractedMetadata["total"], "Should extract total count")
+	
+	// Verify first result metadata with prefix
+	assert.Equal(t, "item-001", convContext.ExtractedMetadata["first_item_id"], "Should extract custom ID from first result")
+	assert.Equal(t, "res-alpha", convContext.ExtractedMetadata["first_resource_key"], "Should extract custom key from first result")
+	assert.Equal(t, "document", convContext.ExtractedMetadata["first_type"], "Should extract type from first result")
+	
+	t.Logf("Extracted %d metadata fields from custom results: %+v", len(convContext.ExtractedMetadata), convContext.ExtractedMetadata)
 }

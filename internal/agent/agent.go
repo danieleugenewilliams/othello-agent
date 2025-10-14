@@ -611,8 +611,19 @@ func (a *Agent) ProcessToolResult(ctx context.Context, toolName string, result *
 // ExecuteToolUnified provides a single, consistent pathway for tool execution
 // This method replaces the dual pathways (direct + chat) with unified processing
 func (a *Agent) ExecuteToolUnified(ctx context.Context, toolName string, params map[string]interface{}, userContext string) (string, error) {
-	a.logger.Printf("Executing tool (unified): %s with params: %+v", toolName, params)
-	log.Printf("🚀 UNIFIED EXECUTION STARTED: %s", toolName)
+	// Use the enhanced version with empty conversation context for backward compatibility
+	convContext := &model.ConversationContext{
+		UserQuery:   userContext,
+		SessionType: "chat",
+	}
+	return a.ExecuteToolUnifiedWithContext(ctx, toolName, params, convContext)
+}
+
+// ExecuteToolUnifiedWithContext provides tool execution with conversation context for intelligent responses
+func (a *Agent) ExecuteToolUnifiedWithContext(ctx context.Context, toolName string, params map[string]interface{}, convContext *model.ConversationContext) (string, error) {
+	a.logger.Printf("Executing tool (unified with context): %s with params: %+v", toolName, params)
+	a.logger.Printf("Conversation context: %d history messages, query: %s", len(convContext.History), convContext.UserQuery)
+	log.Printf("🚀 UNIFIED EXECUTION STARTED (with context): %s", toolName)
 
 	// Get the tool schema for validation
 	tool, exists := a.mcpRegistry.GetTool(toolName)
@@ -639,13 +650,13 @@ func (a *Agent) ExecuteToolUnified(ctx context.Context, toolName string, params 
 		return "", err
 	}
 
-	a.logger.Printf("Tool %s executed successfully (unified)", toolName)
+	a.logger.Printf("Tool %s executed successfully (unified with context)", toolName)
 
-	// Use universal MCP processor directly with the ToolResult
+	// Use enhanced MCP processor with conversation context
 	processor := &ToolResultProcessor{Logger: a.logger}
-	a.logger.Printf("[UNIFIED] About to call processor with toolName=%s", toolName)
-	processedResult, err := processor.ProcessToolResult(ctx, toolName, result.Result, userContext)
-	a.logger.Printf("[UNIFIED] Processor returned result length=%d, error=%v", len(processedResult), err)
+	a.logger.Printf("[UNIFIED] About to call processor with toolName=%s and conversation context", toolName)
+	processedResult, err := processor.ProcessToolResultWithContext(ctx, toolName, result.Result, convContext)
+	a.logger.Printf("[UNIFIED] Context-aware processor returned result length=%d, error=%v", len(processedResult), err)
 	if err != nil {
 		// Log error but don't fail - use a basic fallback
 		a.logger.Printf("Warning: Failed to process result for %s: %v", toolName, err)
@@ -655,6 +666,12 @@ func (a *Agent) ExecuteToolUnified(ctx context.Context, toolName string, params 
 			processedResult = "Tool executed successfully but couldn't process the result."
 		}
 	}
+
+	// Update conversation context with this tool usage
+	if convContext.PreviousTools == nil {
+		convContext.PreviousTools = make([]string, 0)
+	}
+	convContext.PreviousTools = append(convContext.PreviousTools, toolName)
 
 	// Broadcast unified tool execution update
 	a.broadcastUpdate(tui.ToolExecutedUnifiedMsg{

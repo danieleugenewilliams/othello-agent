@@ -377,6 +377,72 @@ func (s *ConversationStore) UpdateConversationStats(conversationID string) error
 	return s.updateConversationStats(conversationID)
 }
 
+// GetRecentConversationContext retrieves the most recent messages from a conversation for context
+// This is optimized for conversation context needs - gets recent messages in chronological order
+func (s *ConversationStore) GetRecentConversationContext(conversationID string, limit int) ([]*Message, error) {
+	if limit <= 0 {
+		limit = 10 // Default to last 10 messages
+	}
+
+	// Get the most recent messages in reverse order, then reverse the result
+	query := `
+		SELECT id, conversation_id, role, content, tool_call, tool_result, timestamp, token_count
+		FROM messages
+		WHERE conversation_id = ?
+		ORDER BY timestamp DESC
+		LIMIT ?
+	`
+
+	rows, err := s.db.Query(query, conversationID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query recent messages: %w", err)
+	}
+	defer rows.Close()
+
+	var messages []*Message
+	for rows.Next() {
+		var msg Message
+		var toolCallJSON, toolResultJSON sql.NullString
+
+		if err := rows.Scan(
+			&msg.ID, &msg.ConversationID, &msg.Role, &msg.Content,
+			&toolCallJSON, &toolResultJSON, &msg.Timestamp, &msg.TokenCount,
+		); err != nil {
+			return nil, fmt.Errorf("scan message: %w", err)
+		}
+
+		// Deserialize tool call and result
+		if toolCallJSON.Valid {
+			var toolCall ToolCall
+			if err := json.Unmarshal([]byte(toolCallJSON.String), &toolCall); err != nil {
+				return nil, fmt.Errorf("unmarshal tool call: %w", err)
+			}
+			msg.ToolCall = &toolCall
+		}
+
+		if toolResultJSON.Valid {
+			var toolResult ToolResult
+			if err := json.Unmarshal([]byte(toolResultJSON.String), &toolResult); err != nil {
+				return nil, fmt.Errorf("unmarshal tool result: %w", err)
+			}
+			msg.ToolResult = &toolResult
+		}
+
+		messages = append(messages, &msg)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate messages: %w", err)
+	}
+
+	// Reverse the messages to get chronological order (oldest first)
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
+	}
+
+	return messages, nil
+}
+
 // Close closes the database connection
 func (s *ConversationStore) Close() error {
 	return s.db.Close()

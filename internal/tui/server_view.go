@@ -12,6 +12,7 @@ import (
 )
 
 // AgentInterface defines what the TUI needs from the Agent
+
 type AgentInterface interface {
 	GetMCPServers() []ServerInfo
 	GetMCPTools(ctx context.Context) ([]Tool, error)
@@ -20,6 +21,7 @@ type AgentInterface interface {
 	ExecuteTool(ctx context.Context, toolName string, params map[string]interface{}) (*ToolExecutionResult, error)
 	ProcessToolResult(ctx context.Context, toolName string, result *mcp.ExecuteResult, userQuery string) (string, error)
 	ExecuteToolUnified(ctx context.Context, toolName string, params map[string]interface{}, userContext string) (string, error)
+	ExecuteToolUnifiedWithContext(ctx context.Context, toolName string, params map[string]interface{}, convContext *model.ConversationContext) (string, error)
 }
 
 // ServerInfo represents MCP server information
