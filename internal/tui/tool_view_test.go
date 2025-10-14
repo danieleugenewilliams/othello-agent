@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/danieleugenewilliams/othello-agent/internal/mcp"
 	"github.com/danieleugenewilliams/othello-agent/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -42,6 +43,16 @@ func (m *MockAgentForTools) ExecuteTool(ctx context.Context, toolName string, pa
 func (m *MockAgentForTools) GetMCPToolsAsDefinitions(ctx context.Context) ([]model.ToolDefinition, error) {
 	args := m.Called(ctx)
 	return args.Get(0).([]model.ToolDefinition), args.Error(1)
+}
+
+func (m *MockAgentForTools) ExecuteToolUnified(ctx context.Context, toolName string, params map[string]interface{}, userContext string) (string, error) {
+	args := m.Called(ctx, toolName, params, userContext)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockAgentForTools) ProcessToolResult(ctx context.Context, toolName string, result *mcp.ExecuteResult, userQuery string) (string, error) {
+	args := m.Called(ctx, toolName, result, userQuery)
+	return args.String(0), args.Error(1)
 }
 
 func TestToolView_NewToolView(t *testing.T) {
