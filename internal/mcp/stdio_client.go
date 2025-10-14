@@ -83,7 +83,7 @@ func (c *STDIOClient) Connect(ctx context.Context) error {
 	go c.readErrors()
 	
 	atomic.StoreInt32(&c.connected, 1)
-	c.logger.Info("Connected to MCP server", "name", c.server.Name, "pid", c.cmd.Process.Pid)
+	c.logger.Info("Connected to MCP server name=%s pid=%d", c.server.Name, c.cmd.Process.Pid)
 	
 	// Send initialize request
 	return c.initialize(ctx)
@@ -111,7 +111,7 @@ func (c *STDIOClient) Disconnect(ctx context.Context) error {
 	// Terminate process
 	if c.cmd != nil && c.cmd.Process != nil {
 		if err := c.cmd.Process.Kill(); err != nil {
-			c.logger.Error("Failed to kill MCP server process", "error", err)
+			c.logger.Error("Failed to kill MCP server process: %v", err)
 		}
 		c.cmd.Wait() // Wait for process to exit
 	}
@@ -259,7 +259,7 @@ func (c *STDIOClient) initialize(ctx context.Context) error {
 		return fmt.Errorf("initialize error: %s", response.Error.Message)
 	}
 	
-	c.logger.Info("Initialized MCP server", "name", c.server.Name)
+	c.logger.Info("Initialized MCP server %s", c.server.Name)
 	return nil
 }
 
@@ -327,7 +327,7 @@ func (c *STDIOClient) readResponses() {
 		
 		var msg Message
 		if err := json.Unmarshal([]byte(line), &msg); err != nil {
-			c.logger.Error("Failed to unmarshal response", "error", err, "line", line)
+			c.logger.Error("Failed to unmarshal response: %v, line: %s", err, line)
 			continue
 		}
 		
@@ -343,7 +343,7 @@ func (c *STDIOClient) readResponses() {
 			case int:
 				responseID = int64(id)
 			default:
-				c.logger.Error("Unexpected ID type", "type", fmt.Sprintf("%T", id), "value", id)
+				c.logger.Error("Unexpected ID type %T value %v", id, id)
 				continue
 			}
 			
@@ -352,20 +352,20 @@ func (c *STDIOClient) readResponses() {
 				select {
 				case ch <- msg:
 				default:
-					c.logger.Error("Response channel full", "id", responseID)
+					c.logger.Error("Response channel full for id %v", responseID)
 				}
 			} else {
-				c.logger.Debug("No waiting request for response", "id", responseID)
+				c.logger.Debug("No waiting request for response id %v", responseID)
 			}
 			c.responsesMu.RUnlock()
 		} else {
 			// Handle notification
-			c.logger.Debug("Received notification", "method", msg.Method)
+			c.logger.Debug("Received notification method %s", msg.Method)
 		}
 	}
 	
 	if err := scanner.Err(); err != nil {
-		c.logger.Error("Error reading from server", "error", err)
+		c.logger.Error("Error reading from server: %v", err)
 	}
 }
 
@@ -375,7 +375,7 @@ func (c *STDIOClient) readErrors() {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line != "" {
-			c.logger.Error("Server stderr", "message", line)
+			c.logger.Error("Server stderr: %s", line)
 		}
 	}
 }

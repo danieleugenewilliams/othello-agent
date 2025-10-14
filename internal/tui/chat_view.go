@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/danieleugenewilliams/othello-agent/internal/mcp"
 	"github.com/danieleugenewilliams/othello-agent/internal/model"
 )
 
@@ -151,19 +152,11 @@ func (v *ChatView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			v.AddMessage(assistantMsg)
 			
-			// Execute the tools
-			return v, v.executeToolCalls(msg.ToolCalls, msg.RequestID)
+			// Execute the tools using unified pathway
+			return v, v.executeToolCallsUnified(msg.ToolCalls, msg.RequestID, msg.UserMessage)
 		}
 		return v, nil
 		
-	case ToolExecutionResultMsg:
-		// Handle tool execution results
-		if msg.RequestID == v.requestID {
-			// Instead of just showing "tool completed", we need to feed the results 
-			// back to the LLM to generate a proper response
-			return v, v.generateFollowUpResponse(msg.Results, msg.RequestID)
-		}
-		return v, nil
 	
 	case MCPToolExecutingMsg:
 		// Add a message indicating tool execution has started
@@ -176,47 +169,68 @@ func (v *ChatView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return v, nil
 	
 	case MCPToolExecutedMsg:
-		// Handle tool execution completion
+		// Handle tool execution completion using intelligent result processing
 		if msg.Error != nil {
 			// Go error occurred during execution
 			errorMsg := ChatMessage{
-				Role:      "tool",
-				Content:   fmt.Sprintf("Tool execution failed: %s", msg.Error.Error()),
+				Role:      "assistant",
+				Content:   "I encountered an issue while executing that tool. Please try again.",
 				Timestamp: time.Now().Format("15:04:05"),
 				Error:     msg.Error.Error(),
 			}
 			v.AddMessage(errorMsg)
 		} else if msg.Result != nil && msg.Result.Result != nil && msg.Result.Result.IsError {
 			// MCP-level error
-			errorText := "Unknown MCP error"
-			if len(msg.Result.Result.Content) > 0 {
-				errorText = msg.Result.Result.Content[0].Text
-			}
 			errorMsg := ChatMessage{
-				Role:      "tool",
-				Content:   fmt.Sprintf("Tool error: %s", errorText),
+				Role:      "assistant",
+				Content:   "I was unable to complete that action. Please try again.",
 				Timestamp: time.Now().Format("15:04:05"),
-				Error:     errorText,
 			}
 			v.AddMessage(errorMsg)
 		} else if msg.Result != nil && msg.Result.Result != nil {
-			// Success - extract text from result content
-			var resultText string
-			if len(msg.Result.Result.Content) > 0 {
-				resultText = msg.Result.Result.Content[0].Text
+			// Success - use agent's intelligent result processing
+			if v.agent != nil {
+				// Use the agent to process the tool result intelligently
+				return v, v.processToolResultWithAgent(msg.ToolName, msg.Result, v.currentUserMessage)
 			} else {
-				resultText = "Tool completed successfully"
+				// Fallback to basic display if no agent available
+				var resultText string
+				if len(msg.Result.Result.Content) > 0 {
+					resultText = msg.Result.Result.Content[0].Text
+				} else {
+					resultText = "Tool completed successfully"
+				}
+
+				successMsg := ChatMessage{
+					Role:      "assistant",
+					Content:   fmt.Sprintf("I found this information: %s", resultText),
+					Timestamp: time.Now().Format("15:04:05"),
+				}
+				v.AddMessage(successMsg)
 			}
-			
-			successMsg := ChatMessage{
-				Role:      "tool",
-				Content:   fmt.Sprintf("Tool result from %s:\n%s", msg.ToolName, resultText),
-				Timestamp: time.Now().Format("15:04:05"),
-			}
-			v.AddMessage(successMsg)
 		}
 		return v, nil
-		
+
+	case ToolExecutedUnifiedMsg:
+		// Handle unified tool execution results - these are already processed natural language
+		if msg.Success {
+			resultMsg := ChatMessage{
+				Role:      "assistant",
+				Content:   msg.Result,
+				Timestamp: time.Now().Format("15:04:05"),
+			}
+			v.AddMessage(resultMsg)
+		} else {
+			errorMsg := ChatMessage{
+				Role:      "assistant",
+				Content:   "I encountered an issue while executing that tool. Please try again.",
+				Timestamp: time.Now().Format("15:04:05"),
+			}
+			v.AddMessage(errorMsg)
+		}
+		v.waitingForResponse = false
+		return v, nil
+
 	case tea.KeyMsg:
 		// Don't accept input if waiting for response
 		if v.waitingForResponse && msg.String() == "enter" {
@@ -596,35 +610,71 @@ func (v *ChatView) generateResponseWithTools(message, id string) tea.Cmd {
 	}
 }
 
-// executeToolCalls executes the detected tool calls
-func (v *ChatView) executeToolCalls(toolCalls []model.ToolCall, requestID string) tea.Cmd {
+// processToolResultWithAgent processes tool results using the agent's intelligent processor
+func (v *ChatView) processToolResultWithAgent(toolName string, result *mcp.ExecuteResult, userQuery string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		
-		var results []string
-		for _, toolCall := range toolCalls {
-			if v.agent != nil {
-				result, err := v.agent.ExecuteTool(ctx, toolCall.Name, toolCall.Arguments)
-				if err != nil {
-					results = append(results, fmt.Sprintf("❌ **%s** failed: %v", toolCall.Name, err))
-				} else if result.Success {
-					// Capture the ACTUAL result instead of just "success"
-					resultText := fmt.Sprintf("✅ **%s**: %v", toolCall.Name, result.Result)
-					results = append(results, resultText)
-				} else {
-					results = append(results, fmt.Sprintf("❌ **%s**: %s", toolCall.Name, result.Error))
-				}
-			} else {
-				results = append(results, fmt.Sprintf("❌ **%s**: no agent available", toolCall.Name))
+
+		// Use the agent's ProcessToolResult method directly
+		processedResult, err := v.agent.ProcessToolResult(ctx, toolName, result, userQuery)
+		if err != nil {
+			return ModelResponseMsg{
+				Response: &model.Response{Content: "I had trouble processing the tool result."},
+				Error:    err,
+				ID:       "",
 			}
 		}
-		
-		return ToolExecutionResultMsg{
-			RequestID: requestID,
-			Results:   results,
+
+		return ModelResponseMsg{
+			Response: &model.Response{Content: processedResult},
+			Error:    nil,
+			ID:       "",
 		}
 	}
 }
+
+// executeToolCalls executes the detected tool calls
+// executeToolCallsUnified executes tool calls using the unified pathway
+func (v *ChatView) executeToolCallsUnified(toolCalls []model.ToolCall, requestID string, userMessage string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		// For multiple tool calls, we'll collect all results and format them
+		var allResults []string
+
+		for _, toolCall := range toolCalls {
+			if v.agent != nil {
+				// Use the unified execution method with user context
+				result, err := v.agent.ExecuteToolUnified(ctx, toolCall.Name, toolCall.Arguments, userMessage)
+				if err != nil {
+					allResults = append(allResults, fmt.Sprintf("❌ Tool %s failed: %v", toolCall.Name, err))
+				} else {
+					// The result is already processed natural language - use it directly
+					allResults = append(allResults, result)
+				}
+			} else {
+				allResults = append(allResults, fmt.Sprintf("❌ Tool %s failed: no agent available", toolCall.Name))
+			}
+		}
+
+		// Combine all results into a cohesive response
+		var finalResult string
+		if len(allResults) == 1 {
+			finalResult = allResults[0]
+		} else {
+			finalResult = "I've executed several tools to help you:\n\n" + strings.Join(allResults, "\n\n")
+		}
+
+		// Return the unified message type
+		return ToolExecutedUnifiedMsg{
+			ToolName: fmt.Sprintf("%d tools", len(toolCalls)),
+			Result:   finalResult,
+			Success:  true,
+		}
+	}
+}
+
+// Old executeToolCalls method removed - replaced with executeToolCallsUnified
 
 // formatToolResult formats tool results in a user-friendly way
 func (v *ChatView) formatToolResult(toolName string, result interface{}) string {
@@ -706,64 +756,7 @@ func (v *ChatView) formatGenericResult(result interface{}) string {
 	return "Tool executed successfully"
 }
 
-// generateFollowUpResponse generates an LLM response based on tool results
-// This continues the SAME conversation by adding tool results to the history
-func (v *ChatView) generateFollowUpResponse(toolResults []string, requestID string) tea.Cmd {
-	return func() tea.Msg {
-		ctx := context.Background()
-		
-		// Build the conversation history with tool results
-		// Start with the original user message (already in conversationHistory)
-		messages := make([]model.Message, len(v.conversationHistory))
-		copy(messages, v.conversationHistory)
-		
-		// Format tool results cleanly - strip the checkmarks and formatting
-		// to make it easier for the LLM to parse
-		var cleanResults []string
-		for _, result := range toolResults {
-			// Remove markdown formatting and emoji
-			cleaned := strings.TrimPrefix(result, "✅ **")
-			cleaned = strings.TrimPrefix(cleaned, "❌ **")
-			// Remove the tool name prefix (e.g., "search**: ")
-			if idx := strings.Index(cleaned, "**: "); idx != -1 {
-				cleaned = cleaned[idx+4:]
-			} else if idx := strings.Index(cleaned, "**: "); idx != -1 {
-				cleaned = cleaned[idx+3:]
-			}
-			cleanResults = append(cleanResults, cleaned)
-		}
-		resultsText := strings.Join(cleanResults, "\n\n")
-		
-		// Add an assistant message saying it used tools
-		// This mimics the flow the LLM expects
-		messages = append(messages, model.Message{
-			Role:    "assistant",
-			Content: "Let me use the available tools to help answer your question.",
-		})
-		
-		// Add a user message with the tool results
-		// Frame it as the user providing feedback on what the tools returned
-		userFollowUp := fmt.Sprintf("The tools returned the following information:\n\n%s\n\nPlease use this information to answer my original question.", resultsText)
-		
-		messages = append(messages, model.Message{
-			Role:    "user",
-			Content: userFollowUp,
-		})
-		
-		// Now continue the conversation - use regular Chat (not ChatWithTools)
-		// since we already executed the tools
-		response, err := v.model.Chat(ctx, messages, model.GenerateOptions{
-			Temperature: 0.7,
-			MaxTokens:   1024,
-		})
-		
-		return ModelResponseMsg{
-			Response: response,
-			Error:    err,
-			ID:       requestID,
-		}
-	}
-}
+// Old generateFollowUpResponse method removed - replaced with direct unified processing
 
 // Focus sets focus to the input
 func (v *ChatView) Focus() {

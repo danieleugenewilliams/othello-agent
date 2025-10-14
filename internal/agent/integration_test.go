@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -17,10 +18,16 @@ func TestIntegration_FullAgentMCPLifecycle(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	tempDir := t.TempDir()
+	logFile := filepath.Join(tempDir, "test.log")
+
 	cfg := &config.Config{
 		Model: config.ModelConfig{
 			Type: "ollama",
 			Name: "qwen2.5:3b",
+		},
+		Logging: config.LoggingConfig{
+			File: logFile,
 		},
 		MCP: config.MCPConfig{
 			Servers: []config.ServerConfig{
@@ -103,10 +110,16 @@ func TestIntegration_MultipleServerManagement(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	tempDir := t.TempDir()
+	logFile := filepath.Join(tempDir, "test.log")
+
 	cfg := &config.Config{
 		Model: config.ModelConfig{
 			Type: "ollama",
 			Name: "qwen2.5:3b",
+		},
+		Logging: config.LoggingConfig{
+			File: logFile,
 		},
 		MCP: config.MCPConfig{
 			Servers: []config.ServerConfig{
@@ -169,10 +182,16 @@ func TestIntegration_ToolRegistryOperations(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	tempDir := t.TempDir()
+	logFile := filepath.Join(tempDir, "test.log")
+
 	cfg := &config.Config{
 		Model: config.ModelConfig{
 			Type: "ollama",
 			Name: "qwen2.5:3b",
+		},
+		Logging: config.LoggingConfig{
+			File: logFile,
 		},
 		MCP: config.MCPConfig{
 			Servers: []config.ServerConfig{
@@ -228,11 +247,17 @@ func TestIntegration_ErrorHandlingAndRecovery(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	tempDir := t.TempDir()
+	logFile := filepath.Join(tempDir, "test.log")
+
 	// Test with completely invalid configuration
 	cfg := &config.Config{
 		Model: config.ModelConfig{
 			Type: "ollama",
 			Name: "qwen2.5:3b",
+		},
+		Logging: config.LoggingConfig{
+			File: logFile,
 		},
 		MCP: config.MCPConfig{
 			Servers: []config.ServerConfig{

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -106,10 +107,16 @@ func TestAgentStartTUI(t *testing.T) {
 
 // TestAgent_MCPManagerIntegration tests that Agent properly initializes and manages MCP components
 func TestAgent_MCPManagerIntegration(t *testing.T) {
+	tempDir := t.TempDir()
+	logFile := filepath.Join(tempDir, "test.log")
+
 	cfg := &config.Config{
 		Model: config.ModelConfig{
 			Type: "ollama",
 			Name: "qwen2.5:3b",
+		},
+		Logging: config.LoggingConfig{
+			File: logFile,
 		},
 		MCP: config.MCPConfig{
 			Servers: []config.ServerConfig{
@@ -135,10 +142,16 @@ func TestAgent_MCPManagerIntegration(t *testing.T) {
 
 // TestAgent_StartInitializesMCP tests that Agent.Start() properly initializes MCP connections
 func TestAgent_StartInitializesMCP(t *testing.T) {
+	tempDir := t.TempDir()
+	logFile := filepath.Join(tempDir, "test.log")
+
 	cfg := &config.Config{
 		Model: config.ModelConfig{
 			Type: "ollama",
 			Name: "qwen2.5:3b",
+		},
+		Logging: config.LoggingConfig{
+			File: logFile,
 		},
 		MCP: config.MCPConfig{
 			Servers: []config.ServerConfig{
@@ -172,10 +185,16 @@ func TestAgent_StartInitializesMCP(t *testing.T) {
 
 // TestAgent_StopCleansMCP tests that Agent.Stop() properly cleans up MCP connections
 func TestAgent_StopCleansMCP(t *testing.T) {
+	tempDir := t.TempDir()
+	logFile := filepath.Join(tempDir, "test.log")
+
 	cfg := &config.Config{
 		Model: config.ModelConfig{
 			Type: "ollama",
 			Name: "qwen2.5:3b",
+		},
+		Logging: config.LoggingConfig{
+			File: logFile,
 		},
 		MCP: config.MCPConfig{
 			Servers: []config.ServerConfig{
@@ -214,10 +233,16 @@ func TestAgent_StopCleansMCP(t *testing.T) {
 
 // TestAgent_GetMCPTools tests tool discovery through the Agent
 func TestAgent_GetMCPTools(t *testing.T) {
+	tempDir := t.TempDir()
+	logFile := filepath.Join(tempDir, "test.log")
+
 	cfg := &config.Config{
 		Model: config.ModelConfig{
 			Type: "ollama",
 			Name: "qwen2.5:3b",
+		},
+		Logging: config.LoggingConfig{
+			File: logFile,
 		},
 		MCP: config.MCPConfig{
 			Timeout: 5 * time.Second,
@@ -237,10 +262,16 @@ func TestAgent_GetMCPTools(t *testing.T) {
 
 // TestAgent_ConfigurationServerDiscovery tests that Agent properly discovers servers from configuration
 func TestAgent_ConfigurationServerDiscovery(t *testing.T) {
+	tempDir := t.TempDir()
+	logFile := filepath.Join(tempDir, "test.log")
+
 	cfg := &config.Config{
 		Model: config.ModelConfig{
 			Type: "ollama",
 			Name: "qwen2.5:3b",
+		},
+		Logging: config.LoggingConfig{
+			File: logFile,
 		},
 		MCP: config.MCPConfig{
 			Servers: []config.ServerConfig{

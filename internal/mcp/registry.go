@@ -89,7 +89,7 @@ func (r *ToolRegistry) RegisterServer(name string, client Client) error {
 	defer r.mutex.Unlock()
 	
 	r.servers[name] = client
-	r.logger.Info("Registered MCP server", "name", name)
+	r.logger.Info("Registered MCP server %s", name)
 	
 	// Discover tools from the server
 	return r.discoverToolsLocked(context.Background(), name, client)
@@ -122,11 +122,11 @@ func (r *ToolRegistry) discoverToolsLocked(ctx context.Context, serverName strin
 	
 	tools, err := client.ListTools(ctx)
 	if err != nil {
-		r.logger.Error("Failed to list tools from server", "server", serverName, "error", err)
+		r.logger.Error("Failed to list tools from server %s: %v", serverName, err)
 		return fmt.Errorf("list tools from %s: %w", serverName, err)
 	}
 	
-	r.logger.Info("Discovered tools from server", "server", serverName, "count", len(tools))
+	r.logger.Info("Discovered tools from server %s count %d", serverName, len(tools))
 	
 	// Register tools in the registry
 	for _, tool := range tools {
@@ -135,7 +135,7 @@ func (r *ToolRegistry) discoverToolsLocked(ctx context.Context, serverName strin
 		r.tools[tool.Name] = tool
 		r.cache.Set(tool)
 		
-		r.logger.Debug("Registered tool", "name", tool.Name, "server", serverName)
+		r.logger.Debug("Registered tool %s from server %s", tool.Name, serverName)
 	}
 	
 	return nil

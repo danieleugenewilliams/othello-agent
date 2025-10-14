@@ -68,12 +68,12 @@ func (c *HTTPClient) Disconnect(ctx context.Context) error {
 	if c.sessionID != "" {
 		req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.server.URL, nil)
 		if err != nil {
-			c.logger.Error("Failed to create disconnect request", "error", err)
+			c.logger.Error("Failed to create disconnect request: %v", err)
 		} else {
 			c.setHeaders(req)
 			resp, err := c.httpClient.Do(req)
 			if err != nil {
-				c.logger.Error("Failed to send disconnect request", "error", err)
+				c.logger.Error("Failed to send disconnect request: %v", err)
 			} else {
 				resp.Body.Close()
 			}

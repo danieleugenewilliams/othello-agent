@@ -180,7 +180,7 @@ func (m *OllamaModel) ChatWithTools(ctx context.Context, messages []Message, too
 	
 	// Create system message with tool descriptions
 	toolPrompt := m.createToolPrompt(tools)
-	
+
 	// Add system message with tool instructions
 	enhancedMessages := []Message{
 		{Role: "system", Content: toolPrompt},
@@ -196,7 +196,7 @@ func (m *OllamaModel) ChatWithTools(ctx context.Context, messages []Message, too
 	// Parse response for tool calls
 	toolCalls := m.parseToolCalls(response.Content)
 	response.ToolCalls = toolCalls
-	
+
 	return response, nil
 }
 
@@ -205,14 +205,23 @@ func (m *OllamaModel) createToolPrompt(tools []ToolDefinition) string {
 	if len(tools) == 0 {
 		return "You are a helpful AI assistant."
 	}
-	
-	prompt := `You are a helpful AI assistant with access to the following tools. You can use these tools to help answer questions.
 
-IMPORTANT: When you need to use a tool, you MUST respond in this EXACT format:
-TOOL_CALL: tool_name
-ARGUMENTS: {"param1": "value1", "param2": "value2"}
+	prompt := `You are a helpful AI assistant with access to powerful tools. When a user asks for something that requires using a tool, you MUST use the tool.
 
-You MUST include ALL required parameters. Do not make up parameter names - only use the parameters listed below.
+CRITICAL INSTRUCTIONS:
+1. ALWAYS use tools when the user's request requires them (searching, remembering, relating information, etc.)
+2. Use the EXACT format below - no variations allowed
+3. Include ALL required parameters with correct names and types
+
+TOOL CALLING FORMAT:
+TOOL_CALL: exact_tool_name
+ARGUMENTS: {"parameter_name": "parameter_value"}
+
+EXAMPLE:
+User: "Search for Python tutorials"
+Your response:
+TOOL_CALL: search
+ARGUMENTS: {"query": "Python tutorials", "search_type": "semantic"}
 
 Available tools:
 `
@@ -225,17 +234,22 @@ Available tools:
 		}
 	}
 	
-	// Add concrete example if we have tools with parameters
+	// Add specific examples for each tool if available
 	if len(tools) > 0 {
-		prompt += "\n\nExample usage:"
-		prompt += "\nIf user asks: 'Search my memories for Python tutorials'"
-		prompt += "\nYou should respond:"
-		prompt += "\nTOOL_CALL: search"
-		prompt += "\nARGUMENTS: {\"query\": \"Python tutorials\", \"search_type\": \"semantic\"}"
-		prompt += "\n\nRemember: Only include parameters that are listed for that specific tool. Include all required parameters."
+		prompt += "\n\nTOOL USAGE EXAMPLES:"
+		for _, tool := range tools {
+			if tool.Name == "search" {
+				prompt += "\nUser: 'Find memories about RDS'\nResponse: TOOL_CALL: search\nARGUMENTS: {\"query\": \"RDS\", \"search_type\": \"semantic\"}"
+			} else if tool.Name == "remember" {
+				prompt += "\nUser: 'Remember that Redis is fast'\nResponse: TOOL_CALL: remember\nARGUMENTS: {\"content\": \"Redis is fast\"}"
+			} else if tool.Name == "relate" {
+				prompt += "\nUser: 'Connect Redis to caching'\nResponse: TOOL_CALL: relate\nARGUMENTS: {\"concept1\": \"Redis\", \"concept2\": \"caching\", \"relationship\": \"is used for\"}"
+			}
+		}
+		prompt += "\n\nREMEMBER: Use tools for ANY memory-related request (search, remember, relate, forget)."
 	}
-	
-	prompt += "\n\nOnly use tools when necessary to answer the user's question. If you don't need a tool, respond normally."
+
+	prompt += "\n\nIf you don't need a tool, respond normally. But ALWAYS use tools for memory operations."
 	
 	return prompt
 }

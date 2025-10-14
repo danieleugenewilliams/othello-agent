@@ -42,13 +42,7 @@ type RefreshDataMsg struct {
 	ViewType string // "servers", "tools", or "all"
 }
 
-// ToolExecutionMsg represents a tool execution notification
-type ToolExecutionMsg struct {
-	ToolName string
-	Success  bool
-	Result   interface{}
-	Error    string
-}
+// ToolExecutionMsg removed - replaced with ToolExecutedUnifiedMsg
 
 // CommandMsg represents a command execution request
 type CommandMsg struct {
@@ -71,11 +65,7 @@ type ToolCallDetectedMsg struct {
 	Tools               []model.ToolDefinition // Available tools
 }
 
-// ToolExecutionResultMsg represents the result of executing tools
-type ToolExecutionResultMsg struct {
-	RequestID string
-	Results   []string
-}
+// ToolExecutionResultMsg removed - replaced with ToolExecutedUnifiedMsg
 
 // MCPToolExecutingMsg represents a tool execution starting
 type MCPToolExecutingMsg struct {
@@ -88,6 +78,13 @@ type MCPToolExecutedMsg struct {
 	ToolName string
 	Result   *mcp.ExecuteResult
 	Error    error
+}
+
+// ToolExecutedUnifiedMsg represents a unified tool execution result
+type ToolExecutedUnifiedMsg struct {
+	ToolName string
+	Result   string // Already processed natural language result
+	Success  bool
 }
 
 // ServerSelectedMsg represents a server being selected in the ServerView

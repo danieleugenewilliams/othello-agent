@@ -110,7 +110,7 @@ func (m *MCPManager) AddServer(ctx context.Context, cfg config.ServerConfig) err
 	}
 
 	m.clients[cfg.Name] = client
-	m.logger.Info("Added MCP server", "name", cfg.Name, "transport", cfg.Transport)
+	m.logger.Info("Added MCP server %s transport %s", cfg.Name, cfg.Transport)
 
 	// Notify of successful connection
 	toolCount := len(m.registry.ListToolsForServer(cfg.Name))

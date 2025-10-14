@@ -342,22 +342,21 @@ func (tv *ToolView) executeSelectedTool() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		
-		// For now, execute with empty parameters
+		// For now, execute with empty parameters using unified pathway
 		// In a more sophisticated implementation, we would prompt for parameters
-		result, err := tv.agent.ExecuteTool(ctx, selectedTool.Name, make(map[string]interface{}))
+		result, err := tv.agent.ExecuteToolUnified(ctx, selectedTool.Name, make(map[string]interface{}), "Manual tool execution")
 		if err != nil {
-			return ToolExecutionMsg{
+			return ToolExecutedUnifiedMsg{
 				ToolName: selectedTool.Name,
 				Success:  false,
-				Error:    err.Error(),
+				Result:   fmt.Sprintf("Tool execution failed: %v", err),
 			}
 		}
-		
-		return ToolExecutionMsg{
+
+		return ToolExecutedUnifiedMsg{
 			ToolName: selectedTool.Name,
-			Success:  result.Success,
-			Result:   result.Result,
-			Error:    result.Error,
+			Success:  true,
+			Result:   result,
 		}
 	}
 }

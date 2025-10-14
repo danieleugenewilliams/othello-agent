@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/danieleugenewilliams/othello-agent/internal/mcp"
 	"github.com/danieleugenewilliams/othello-agent/internal/model"
 )
 
@@ -17,6 +18,8 @@ type AgentInterface interface {
 	GetMCPToolsAsDefinitions(ctx context.Context) ([]model.ToolDefinition, error)
 	SubscribeToUpdates() <-chan interface{} // Channel for receiving status updates
 	ExecuteTool(ctx context.Context, toolName string, params map[string]interface{}) (*ToolExecutionResult, error)
+	ProcessToolResult(ctx context.Context, toolName string, result *mcp.ExecuteResult, userQuery string) (string, error)
+	ExecuteToolUnified(ctx context.Context, toolName string, params map[string]interface{}, userContext string) (string, error)
 }
 
 // ServerInfo represents MCP server information

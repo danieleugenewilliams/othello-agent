@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
@@ -257,31 +256,7 @@ func (a *Application) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.currentView = ToolViewType
 		return a, nil
 
-	case ToolExecutionMsg:
-		// Handle tool execution results - display in chat view
-		if a.chatView != nil {
-			var message string
-			if msg.Success {
-				message = fmt.Sprintf("Tool '%s' executed successfully", msg.ToolName)
-				if msg.Result != nil {
-					message += fmt.Sprintf(":\n%v", msg.Result)
-				}
-			} else {
-				message = fmt.Sprintf("Tool '%s' execution failed: %s", msg.ToolName, msg.Error)
-			}
-			
-			toolMsg := ChatMessage{
-				Role:      "tool",
-				Content:   message,
-				Timestamp: time.Now().Format("15:04:05"),
-				ToolCall: &ToolCallInfo{
-					Name:   msg.ToolName,
-					Result: fmt.Sprintf("%v", msg.Result),
-				},
-			}
-			a.chatView.AddMessage(toolMsg)
-		}
-		return a, nil
+	// ToolExecutedUnifiedMsg removed from application handler - chat view handles it directly
 
 	default:
 		// Handle agent updates by converting them to TUI messages and forwarding

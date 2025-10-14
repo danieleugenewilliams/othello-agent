@@ -45,7 +45,7 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolName string, params map[
 		}, fmt.Errorf("tool '%s' not found", toolName)
 	}
 	
-	e.logger.Info("Executing tool", "name", toolName, "server", tool.ServerName)
+	e.logger.Info("Executing tool %s from server %s", toolName, tool.ServerName)
 	
 	// Validate parameters against schema
 	if err := e.validateParameters(tool, params); err != nil {
@@ -80,7 +80,7 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolName string, params map[
 	// Execute the tool
 	result, err := client.CallTool(ctx, toolName, params)
 	if err != nil {
-		e.logger.Error("Tool execution failed", "name", toolName, "error", err)
+		e.logger.Error("Tool execution failed %s: %v", toolName, err)
 		return &ExecuteResult{
 			Tool:     tool,
 			Error:    err,
@@ -88,7 +88,7 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolName string, params map[
 		}, err
 	}
 	
-	e.logger.Info("Tool executed successfully", "name", toolName, "content_count", len(result.Content))
+	e.logger.Info("Tool executed successfully %s content_count %d", toolName, len(result.Content))
 	
 	return &ExecuteResult{
 		Tool:     tool,
@@ -263,7 +263,7 @@ func (e *ToolExecutor) validateStringConstraints(name string, value interface{},
 	// Pattern (basic regex - would need regex package for full support)
 	if pattern, ok := schema["pattern"].(string); ok {
 		// This is a simplified pattern check - in production, use regexp package
-		e.logger.Debug("Pattern validation not fully implemented", "parameter", name, "pattern", pattern)
+		e.logger.Debug("Pattern validation not fully implemented for parameter %s pattern %s", name, pattern)
 	}
 	
 	return nil

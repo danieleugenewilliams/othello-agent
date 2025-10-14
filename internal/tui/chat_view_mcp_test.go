@@ -292,3 +292,11 @@ func (m *MockAgentForChat) ExecuteTool(ctx context.Context, toolName string, par
 		Result:   "Mock tool execution result",
 	}, nil
 }
+
+func (m *MockAgentForChat) ExecuteToolUnified(ctx context.Context, toolName string, params map[string]interface{}, userContext string) (string, error) {
+	return "Mock unified tool execution result", nil
+}
+
+func (m *MockAgentForChat) ProcessToolResult(ctx context.Context, toolName string, result *mcp.ExecuteResult, userQuery string) (string, error) {
+	return "Mock processed result", nil
+}

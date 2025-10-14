@@ -71,7 +71,7 @@ func TestIntegration_MCPToolExecution(t *testing.T) {
 	// Connect to server
 	err := client.Connect(ctx)
 	require.NoError(t, err, "Failed to connect to MCP server")
-	defer client.Disconnect()
+	defer client.Disconnect(ctx)
 	
 	// Test tool execution - store a memory
 	params := map[string]interface{}{
@@ -284,6 +284,9 @@ func TestIntegration_FullWorkflow(t *testing.T) {
 // Helper functions
 
 func createTestConfig(t *testing.T) *config.Config {
+	tempDir := t.TempDir()
+	logFile := filepath.Join(tempDir, "integration-test.log")
+
 	return &config.Config{
 		Model: config.ModelConfig{
 			Type:        "ollama",
@@ -316,6 +319,7 @@ func createTestConfig(t *testing.T) *config.Config {
 		},
 		Logging: config.LoggingConfig{
 			Level: "info",
+			File:  logFile,
 		},
 	}
 }
@@ -343,7 +347,7 @@ func isMCPServerAvailable(t *testing.T) bool {
 	// This is a quick test - if the command exists, it should at least start
 	err := client.Connect(ctx)
 	if err == nil {
-		client.Disconnect()
+		client.Disconnect(ctx)
 		return true
 	}
 	

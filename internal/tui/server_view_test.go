@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/danieleugenewilliams/othello-agent/internal/mcp"
 	"github.com/danieleugenewilliams/othello-agent/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -42,6 +43,16 @@ func (m *MockAgent) ExecuteTool(ctx context.Context, toolName string, params map
 func (m *MockAgent) GetMCPToolsAsDefinitions(ctx context.Context) ([]model.ToolDefinition, error) {
 	args := m.Called(ctx)
 	return args.Get(0).([]model.ToolDefinition), args.Error(1)
+}
+
+func (m *MockAgent) ExecuteToolUnified(ctx context.Context, toolName string, params map[string]interface{}, userContext string) (string, error) {
+	args := m.Called(ctx, toolName, params, userContext)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockAgent) ProcessToolResult(ctx context.Context, toolName string, result *mcp.ExecuteResult, userQuery string) (string, error) {
+	args := m.Called(ctx, toolName, result, userQuery)
+	return args.String(0), args.Error(1)
 }
 
 // TestServerView_WithRealMCPData tests that ServerView displays real MCP server data

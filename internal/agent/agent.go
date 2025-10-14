@@ -2,8 +2,14 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/danieleugenewilliams/othello-agent/internal/config"
@@ -11,6 +17,280 @@ import (
 	"github.com/danieleugenewilliams/othello-agent/internal/model"
 	"github.com/danieleugenewilliams/othello-agent/internal/tui"
 )
+
+// sanitizeAndParseJSON implements robust JSON parsing with multiple fallback strategies
+func sanitizeAndParseJSON(rawJSON string, logger *log.Logger) (interface{}, error) {
+	if logger != nil {
+		logger.Printf("[JSON-SANITIZE] Starting JSON sanitization, input length: %d", len(rawJSON))
+	}
+
+	// Strategy 1: Try parsing as-is first
+	var result interface{}
+	if err := json.Unmarshal([]byte(rawJSON), &result); err == nil {
+		if logger != nil {
+			logger.Printf("[JSON-SANITIZE] Strategy 1 success: Direct parsing worked")
+		}
+		return result, nil
+	} else if logger != nil {
+		logger.Printf("[JSON-SANITIZE] Strategy 1 failed: %v", err)
+	}
+
+	// Strategy 2: Clean UTF-8 and try again
+	cleanedJSON := cleanUTF8String(rawJSON)
+	if err := json.Unmarshal([]byte(cleanedJSON), &result); err == nil {
+		if logger != nil {
+			logger.Printf("[JSON-SANITIZE] Strategy 2 success: UTF-8 cleaning worked")
+		}
+		return result, nil
+	} else if logger != nil {
+		logger.Printf("[JSON-SANITIZE] Strategy 2 failed: %v", err)
+	}
+
+	// Strategy 3: Remove control characters and invalid sequences
+	sanitizedJSON := removeInvalidJSONChars(cleanedJSON)
+	if err := json.Unmarshal([]byte(sanitizedJSON), &result); err == nil {
+		if logger != nil {
+			logger.Printf("[JSON-SANITIZE] Strategy 3 success: Character sanitization worked")
+		}
+		return result, nil
+	} else if logger != nil {
+		logger.Printf("[JSON-SANITIZE] Strategy 3 failed: %v", err)
+	}
+
+	// Strategy 4: Extract JSON from mixed content using regex
+	extractedJSON := extractJSONFromMixedContent(sanitizedJSON)
+	if extractedJSON != "" && extractedJSON != sanitizedJSON {
+		if err := json.Unmarshal([]byte(extractedJSON), &result); err == nil {
+			if logger != nil {
+				logger.Printf("[JSON-SANITIZE] Strategy 4 success: JSON extraction worked")
+			}
+			return result, nil
+		} else if logger != nil {
+			logger.Printf("[JSON-SANITIZE] Strategy 4 failed: %v", err)
+		}
+	}
+
+	if logger != nil {
+		logger.Printf("[JSON-SANITIZE] All strategies failed, returning error")
+	}
+	return nil, fmt.Errorf("failed to parse JSON after all sanitization attempts")
+}
+
+// cleanUTF8String removes invalid UTF-8 sequences and replaces them with valid chars
+func cleanUTF8String(s string) string {
+	var builder strings.Builder
+	builder.Grow(len(s))
+
+	for len(s) > 0 {
+		r, size := utf8.DecodeRuneInString(s)
+		if r == utf8.RuneError && size == 1 {
+			// Invalid UTF-8 sequence, skip this byte
+			s = s[1:]
+		} else if unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t' {
+			// Skip most control characters but keep newlines and tabs
+			s = s[size:]
+		} else {
+			builder.WriteRune(r)
+			s = s[size:]
+		}
+	}
+	return builder.String()
+}
+
+// removeInvalidJSONChars removes characters that commonly break JSON parsing
+func removeInvalidJSONChars(s string) string {
+	// Remove null bytes and other problematic characters
+	s = strings.ReplaceAll(s, "\x00", "")
+	s = strings.ReplaceAll(s, "\ufffd", "") // Unicode replacement character
+
+	// Remove sequences that look like encoding artifacts
+	invalidPatterns := []string{
+		"ð", "Ã", "â", "Â", // Common UTF-8 encoding artifacts
+	}
+
+	for _, pattern := range invalidPatterns {
+		s = strings.ReplaceAll(s, pattern, "")
+	}
+
+	return strings.TrimSpace(s)
+}
+
+// extractJSONFromMixedContent attempts to extract valid JSON from mixed content
+func extractJSONFromMixedContent(s string) string {
+	// Look for JSON object boundaries
+	openBrace := strings.Index(s, "{")
+	if openBrace == -1 {
+		return s
+	}
+
+	// Find matching closing brace by counting
+	braceCount := 0
+	inString := false
+	escape := false
+
+	for i := openBrace; i < len(s); i++ {
+		char := s[i]
+
+		if escape {
+			escape = false
+			continue
+		}
+
+		if char == '\\' {
+			escape = true
+			continue
+		}
+
+		if char == '"' {
+			inString = !inString
+			continue
+		}
+
+		if !inString {
+			if char == '{' {
+				braceCount++
+			} else if char == '}' {
+				braceCount--
+				if braceCount == 0 {
+					// Found complete JSON object
+					return s[openBrace : i+1]
+				}
+			}
+		}
+	}
+
+	// If we couldn't find a complete object, return original
+	return s
+}
+
+// getMapKeys returns the keys of a map for logging purposes
+func getMapKeys(m map[string]interface{}) []string {
+	var k []string
+	for key := range m {
+		k = append(k, key)
+	}
+	return k
+}
+
+// extractRawDataFromToolResult extracts the raw JSON data from a ToolResult
+// for processing by ToolResultProcessor
+func extractRawDataFromToolResult(toolResult *mcp.ToolResult) (interface{}, error) {
+	if toolResult == nil {
+		log.Printf("[EXTRACTION] Tool result is nil")
+		return nil, fmt.Errorf("tool result is nil")
+	}
+
+	if len(toolResult.Content) == 0 {
+		log.Printf("[EXTRACTION] Tool result has no content")
+		return nil, fmt.Errorf("tool result has no content")
+	}
+
+	log.Printf("[EXTRACTION] Tool result has %d content items", len(toolResult.Content))
+
+	// Get the first content item (most MCP tools return a single content item)
+	content := toolResult.Content[0]
+	log.Printf("[EXTRACTION] First content type: %s", content.Type)
+
+	// If the content type is text, try to parse it as JSON
+	if content.Type == "text" && content.Text != "" {
+		log.Printf("[EXTRACTION] Processing text content, length: %d", len(content.Text))
+		if len(content.Text) < 500 {
+			log.Printf("[EXTRACTION] Text content: %s", content.Text)
+		}
+
+		var rawData interface{}
+		if err := json.Unmarshal([]byte(content.Text), &rawData); err != nil {
+			log.Printf("[EXTRACTION] Failed to parse JSON, returning text as-is: %v", err)
+			// If it's not valid JSON, return the text as-is
+			return content.Text, nil
+		}
+
+		log.Printf("[EXTRACTION] Successfully parsed JSON, transforming response")
+		// Transform MCP response structure to match ProcessToolResult expectations
+		transformed := transformMCPResponse(rawData)
+		log.Printf("[EXTRACTION] Transformation complete, result type: %T", transformed)
+		return transformed, nil
+	}
+
+	// If content type is not text or text is empty, try the Data field
+	if content.Data != "" {
+		log.Printf("[EXTRACTION] Processing data field, length: %d", len(content.Data))
+		var rawData interface{}
+		if err := json.Unmarshal([]byte(content.Data), &rawData); err != nil {
+			log.Printf("[EXTRACTION] Failed to parse Data JSON, returning data as-is: %v", err)
+			// If it's not valid JSON, return the data as-is
+			return content.Data, nil
+		}
+
+		log.Printf("[EXTRACTION] Successfully parsed Data JSON, transforming response")
+		// Transform MCP response structure to match ProcessToolResult expectations
+		return transformMCPResponse(rawData), nil
+	}
+
+	log.Printf("[EXTRACTION] No usable content found, returning entire ToolResult")
+	// Fallback: return the entire ToolResult if we can't extract anything meaningful
+	return toolResult, nil
+}
+
+// transformMCPResponse transforms the actual MCP response structure into what
+// ToolResultProcessor expects
+func transformMCPResponse(rawData interface{}) interface{} {
+	log.Printf("[TRANSFORM] Input data type: %T", rawData)
+
+	dataMap, ok := rawData.(map[string]interface{})
+	if !ok {
+		log.Printf("[TRANSFORM] Data is not a map, returning as-is")
+		return rawData // Return as-is if not a map
+	}
+
+	log.Printf("[TRANSFORM] Data map has keys: %v", getMapKeys(dataMap))
+
+	// Handle local-memory search response format
+	if data, hasData := dataMap["data"].([]interface{}); hasData {
+		log.Printf("[TRANSFORM] Found 'data' field with %d items, transforming to MCP format", len(data))
+		// Transform: {"data": [{"memory": {...}}, ...], "total_results": N}
+		// To: {"results": [{...}, ...], "total_count": N}
+		results := make([]interface{}, len(data))
+		for i, item := range data {
+			if itemMap, ok := item.(map[string]interface{}); ok {
+				if memory, hasMemory := itemMap["memory"]; hasMemory {
+					results[i] = memory
+				} else {
+					results[i] = itemMap
+				}
+			} else {
+				results[i] = item
+			}
+		}
+
+		transformed := map[string]interface{}{
+			"results": results,
+		}
+
+		// Add total count if available
+		if totalResults, hasTotalResults := dataMap["total_results"]; hasTotalResults {
+			transformed["total_count"] = totalResults
+		} else if count, hasCount := dataMap["count"]; hasCount {
+			transformed["total_count"] = count
+		} else {
+			transformed["total_count"] = len(results)
+		}
+
+		// Copy over other relevant fields
+		for key, value := range dataMap {
+			if key != "data" && key != "total_results" && key != "count" {
+				transformed[key] = value
+			}
+		}
+
+		log.Printf("[TRANSFORM] Transformation complete, result keys: %v", getMapKeys(transformed))
+		return transformed
+	}
+
+	// Handle other MCP response formats (pass through)
+	log.Printf("[TRANSFORM] No data field found, passing through as-is")
+	return rawData
+}
 
 // Agent represents the core agent instance
 type Agent struct {
@@ -48,7 +328,11 @@ func New(cfg *config.Config) (*Agent, error) {
 		return nil, fmt.Errorf("configuration cannot be nil")
 	}
 
-	logger := log.New(log.Writer(), "[AGENT] ", log.LstdFlags)
+	// Set up file-based logging
+	logger, err := setupFileLogger(cfg.Logging.File)
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup logger: %w", err)
+	}
 
 	// Initialize MCP registry with logger adapter
 	mcpLogger := &agentLogger{logger: logger}
@@ -73,6 +357,35 @@ func New(cfg *config.Config) (*Agent, error) {
 	mcpManager.SetUpdateCallback(agent.broadcastUpdate)
 
 	return agent, nil
+}
+
+// setupFileLogger creates a file-based logger with the specified log file path
+func setupFileLogger(logFilePath string) (*log.Logger, error) {
+	// Expand tilde to home directory if present
+	if len(logFilePath) >= 2 && logFilePath[:2] == "~/" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get home directory: %w", err)
+		}
+		logFilePath = filepath.Join(homeDir, logFilePath[2:])
+	}
+
+	// Create the directory if it doesn't exist
+	logDir := filepath.Dir(logFilePath)
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create log directory %s: %w", logDir, err)
+	}
+
+	// Open or create the log file
+	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open log file %s: %w", logFilePath, err)
+	}
+
+	// Create logger that writes to the file
+	logger := log.New(logFile, "[AGENT] ", log.LstdFlags)
+
+	return logger, nil
 }
 
 // agentLogger adapts standard log.Logger to the MCP Logger interface
@@ -269,19 +582,22 @@ func (a *Agent) ExecuteTool(ctx context.Context, toolName string, params map[str
 	
 	// Process the result into a natural language summary
 	processor := &ToolResultProcessor{}
-	processedResult, err := processor.ProcessToolResult(ctx, toolName, result.Result, "")
+
+	// Extract raw data from ToolResult for processing
+	rawData, err := extractRawDataFromToolResult(result.Result)
+	if err != nil {
+		a.logger.Printf("Warning: Failed to extract raw data from result for %s: %v", toolName, err)
+		rawData = result.Result // Fallback to original result
+	}
+
+	processedResult, err := processor.ProcessToolResult(ctx, toolName, rawData, "")
 	if err != nil {
 		// Log error but don't fail - use original result as fallback
 		a.logger.Printf("Warning: Failed to process result for %s: %v", toolName, err)
 		processedResult = fmt.Sprintf("%v", result.Result)
 	}
 	
-	// Broadcast tool execution update with processed output
-	a.broadcastUpdate(tui.ToolExecutionMsg{
-		ToolName: toolName,
-		Success:  true,
-		Result:   processedResult,
-	})
+	// Note: Broadcasting moved to ExecuteToolUnified - this method is deprecated
 	
 	return &tui.ToolExecutionResult{
 		ToolName: toolName,
@@ -289,6 +605,111 @@ func (a *Agent) ExecuteTool(ctx context.Context, toolName string, params map[str
 		Result:   processedResult,
 		Duration: result.Duration,
 	}, nil
+}
+
+// ProcessToolResult processes tool results using the intelligent result processor
+func (a *Agent) ProcessToolResult(ctx context.Context, toolName string, result *mcp.ExecuteResult, userQuery string) (string, error) {
+	// Extract raw data from ToolResult using our extraction function
+	rawData, err := extractRawDataFromToolResult(result.Result)
+	if err != nil {
+		a.logger.Printf("Warning: Failed to extract raw data from result for %s: %v", toolName, err)
+		rawData = result.Result // Fallback to original result
+	}
+
+	// CRITICAL FIX: If rawData is a JSON string, use robust parsing with sanitization
+	if rawDataStr, ok := rawData.(string); ok && len(rawDataStr) > 0 {
+		parsedData, jsonErr := sanitizeAndParseJSON(rawDataStr, a.logger)
+		if jsonErr == nil {
+			a.logger.Printf("[PROCESS] Successfully parsed JSON string to %T", parsedData)
+			rawData = parsedData
+		} else {
+			a.logger.Printf("[PROCESS] Robust JSON parsing failed: %v", jsonErr)
+		}
+	}
+
+	// Process using the intelligent processor
+	processor := &ToolResultProcessor{Logger: a.logger}
+	return processor.ProcessToolResult(ctx, toolName, rawData, userQuery)
+}
+
+// ExecuteToolUnified provides a single, consistent pathway for tool execution
+// This method replaces the dual pathways (direct + chat) with unified processing
+func (a *Agent) ExecuteToolUnified(ctx context.Context, toolName string, params map[string]interface{}, userContext string) (string, error) {
+	a.logger.Printf("Executing tool (unified): %s with params: %+v", toolName, params)
+	log.Printf("🚀 UNIFIED EXECUTION STARTED: %s", toolName)
+
+	// Get the tool schema for validation
+	tool, exists := a.mcpRegistry.GetTool(toolName)
+	if !exists {
+		err := fmt.Errorf("tool '%s' not found", toolName)
+		a.logger.Printf("Tool not found: %s", toolName)
+		return "", err
+	}
+
+	// Validate the tool call before execution
+	toolCall := model.ToolCall{
+		Name:      toolName,
+		Arguments: params,
+	}
+	if err := ValidateToolCall(toolCall, tool); err != nil {
+		a.logger.Printf("Tool validation failed for %s: %v", toolName, err)
+		return "", fmt.Errorf("invalid parameters: %v", err)
+	}
+
+	// Execute the tool using the tool executor
+	result, err := a.toolExecutor.Execute(ctx, toolName, params)
+	if err != nil {
+		a.logger.Printf("Tool execution failed for %s: %v", toolName, err)
+		return "", err
+	}
+
+	a.logger.Printf("Tool %s executed successfully (unified)", toolName)
+
+	// Process the result into a natural language summary using our intelligent processor
+	rawData, err := extractRawDataFromToolResult(result.Result)
+	if err != nil {
+		a.logger.Printf("Warning: Failed to extract raw data from result for %s: %v", toolName, err)
+		rawData = result.Result // Fallback to original result
+	}
+
+	// CRITICAL FIX: If rawData is a JSON string, use robust parsing with sanitization
+	if rawDataStr, ok := rawData.(string); ok && len(rawDataStr) > 0 {
+		parsedData, jsonErr := sanitizeAndParseJSON(rawDataStr, a.logger)
+		if jsonErr == nil {
+			a.logger.Printf("[UNIFIED] Successfully parsed JSON string to %T", parsedData)
+			rawData = parsedData
+		} else {
+			a.logger.Printf("[UNIFIED] Robust JSON parsing failed: %v", jsonErr)
+		}
+	}
+
+	processor := &ToolResultProcessor{Logger: a.logger}
+	a.logger.Printf("[UNIFIED] About to call processor with toolName=%s, rawData type=%T", toolName, rawData)
+	if rawData != nil {
+		if rawDataBytes, err := json.Marshal(rawData); err == nil && len(rawDataBytes) < 1000 {
+			a.logger.Printf("[UNIFIED] rawData content: %s", string(rawDataBytes))
+		}
+	}
+	processedResult, err := processor.ProcessToolResult(ctx, toolName, rawData, userContext)
+	a.logger.Printf("[UNIFIED] Processor returned result length=%d, error=%v", len(processedResult), err)
+	if err != nil {
+		// Log error but don't fail - use a basic fallback
+		a.logger.Printf("Warning: Failed to process result for %s: %v", toolName, err)
+		if result.Result != nil && len(result.Result.Content) > 0 {
+			processedResult = result.Result.Content[0].Text
+		} else {
+			processedResult = "Tool executed successfully but couldn't process the result."
+		}
+	}
+
+	// Broadcast unified tool execution update
+	a.broadcastUpdate(tui.ToolExecutedUnifiedMsg{
+		ToolName: toolName,
+		Result:   processedResult,
+		Success:  true,
+	})
+
+	return processedResult, nil
 }
 
 // broadcastUpdate sends an update to all subscribers (non-blocking)
