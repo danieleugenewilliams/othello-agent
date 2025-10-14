@@ -594,6 +594,10 @@ func (v *ChatView) generateResponseWithTools(message, id string) tea.Cmd {
 		if v.conversationContext != nil && len(v.conversationContext.ExtractedMetadata) > 0 {
 			metadataContext := v.buildMetadataContextForModel()
 			if metadataContext != "" {
+				// Log what metadata we're injecting (for debugging)
+				fmt.Printf("[CHAT] Injecting metadata context with %d fields\n", len(v.conversationContext.ExtractedMetadata))
+				fmt.Printf("[CHAT] Metadata context: %s\n", metadataContext)
+				
 				// Insert metadata as a system message before the user message
 				messages = []model.Message{
 					{Role: "system", Content: metadataContext},
@@ -778,22 +782,30 @@ func (v *ChatView) buildMetadataContextForModel() string {
 	}
 
 	var contextParts []string
-	contextParts = append(contextParts, "Context from previous tool executions:")
+	contextParts = append(contextParts, "IMPORTANT: Context from previous tool executions that you MUST use when calling tools:")
 
-	// Include important IDs that the model might need for follow-up requests
-	if memoryID, exists := v.conversationContext.ExtractedMetadata["memory_id"]; exists {
-		contextParts = append(contextParts, fmt.Sprintf("- Last memory_id: %v", memoryID))
-	}
-	if id, exists := v.conversationContext.ExtractedMetadata["id"]; exists {
-		if _, hasMemoryID := v.conversationContext.ExtractedMetadata["memory_id"]; !hasMemoryID {
-			contextParts = append(contextParts, fmt.Sprintf("- Last id: %v", id))
+	// Include ALL extracted metadata fields (universal extraction)
+	// Priority fields first (most commonly needed)
+	priorityKeys := []string{"memory_id", "id", "first_memory_id", "first_id"}
+	for _, key := range priorityKeys {
+		if value, exists := v.conversationContext.ExtractedMetadata[key]; exists {
+			contextParts = append(contextParts, fmt.Sprintf("- %s: %v (use this value when tools require '%s' parameter)", key, value, key))
 		}
 	}
-	if firstMemoryID, exists := v.conversationContext.ExtractedMetadata["first_memory_id"]; exists {
-		contextParts = append(contextParts, fmt.Sprintf("- First result memory_id: %v", firstMemoryID))
-	}
-	if firstID, exists := v.conversationContext.ExtractedMetadata["first_id"]; exists {
-		contextParts = append(contextParts, fmt.Sprintf("- First result id: %v", firstID))
+
+	// Then include all other extracted metadata
+	for key, value := range v.conversationContext.ExtractedMetadata {
+		// Skip if already included in priority keys
+		alreadyIncluded := false
+		for _, priorityKey := range priorityKeys {
+			if key == priorityKey {
+				alreadyIncluded = true
+				break
+			}
+		}
+		if !alreadyIncluded {
+			contextParts = append(contextParts, fmt.Sprintf("- %s: %v (use this value when tools require '%s' parameter)", key, value, key))
+		}
 	}
 
 	if len(contextParts) > 1 { // More than just the header
