@@ -267,17 +267,26 @@ func (a *Agent) ExecuteTool(ctx context.Context, toolName string, params map[str
 	
 	a.logger.Printf("Tool %s executed successfully", toolName)
 	
-	// Broadcast tool execution update
+	// Process the result into a natural language summary
+	processor := &ToolResultProcessor{}
+	processedResult, err := processor.ProcessToolResult(ctx, toolName, result.Result, "")
+	if err != nil {
+		// Log error but don't fail - use original result as fallback
+		a.logger.Printf("Warning: Failed to process result for %s: %v", toolName, err)
+		processedResult = fmt.Sprintf("%v", result.Result)
+	}
+	
+	// Broadcast tool execution update with processed output
 	a.broadcastUpdate(tui.ToolExecutionMsg{
 		ToolName: toolName,
 		Success:  true,
-		Result:   result.Result,
+		Result:   processedResult,
 	})
 	
 	return &tui.ToolExecutionResult{
 		ToolName: toolName,
 		Success:  true,
-		Result:   result.Result,
+		Result:   processedResult,
 		Duration: result.Duration,
 	}, nil
 }

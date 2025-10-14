@@ -63,9 +63,12 @@ type ViewSwitchMsg struct {
 
 // ToolCallDetectedMsg represents when the model wants to call tools
 type ToolCallDetectedMsg struct {
-	ToolCalls []model.ToolCall
-	RequestID string
-	Response  *model.Response
+	ToolCalls           []model.ToolCall
+	RequestID           string
+	Response            *model.Response
+	UserMessage         string              // Original user message
+	ConversationHistory []model.Message     // Conversation history up to this point
+	Tools               []model.ToolDefinition // Available tools
 }
 
 // ToolExecutionResultMsg represents the result of executing tools

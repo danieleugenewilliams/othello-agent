@@ -43,6 +43,10 @@ type ChatView struct {
 	agent    AgentInterface // Add agent for tool access
 	waitingForResponse bool
 	requestID string
+	// Conversation context for tool calling
+	conversationHistory []model.Message
+	currentUserMessage  string
+	availableTools      []model.ToolDefinition
 }
 
 // NewChatView creates a new chat view
@@ -122,6 +126,11 @@ func (v *ChatView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle tool call detection
 		if msg.RequestID == v.requestID {
 			v.waitingForResponse = false
+			
+			// Store conversation context for tool result processing
+			v.conversationHistory = msg.ConversationHistory
+			v.currentUserMessage = msg.UserMessage
+			v.availableTools = msg.Tools
 			
 			// Add a more natural assistant message
 			var toolCallContent string
@@ -570,9 +579,12 @@ func (v *ChatView) generateResponseWithTools(message, id string) tea.Cmd {
 		// If tools were called, execute them
 		if response != nil && len(response.ToolCalls) > 0 {
 			return ToolCallDetectedMsg{
-				ToolCalls: response.ToolCalls,
-				RequestID: id,
-				Response:  response,
+				ToolCalls:           response.ToolCalls,
+				RequestID:           id,
+				Response:            response,
+				UserMessage:         message,
+				ConversationHistory: messages,
+				Tools:               tools,
 			}
 		}
 		
@@ -695,27 +707,51 @@ func (v *ChatView) formatGenericResult(result interface{}) string {
 }
 
 // generateFollowUpResponse generates an LLM response based on tool results
+// This continues the SAME conversation by adding tool results to the history
 func (v *ChatView) generateFollowUpResponse(toolResults []string, requestID string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		
-		// Create a prompt that includes the tool results
-		resultsText := strings.Join(toolResults, "\n")
+		// Build the conversation history with tool results
+		// Start with the original user message (already in conversationHistory)
+		messages := make([]model.Message, len(v.conversationHistory))
+		copy(messages, v.conversationHistory)
 		
-		// Ask the LLM to analyze and present the tool results
-		followUpPrompt := fmt.Sprintf(`Based on the tool execution results below, provide a helpful response to the user:
-
-Tool Results:
-%s
-
-Please analyze these results and provide a clear, helpful response to the user about what was found or accomplished.`, resultsText)
-
-		// Generate response with the tool results as context
-		messages := []model.Message{
-			{Role: "system", Content: "You are a helpful AI assistant. Analyze the tool results and provide a clear response to the user."},
-			{Role: "user", Content: followUpPrompt},
+		// Format tool results cleanly - strip the checkmarks and formatting
+		// to make it easier for the LLM to parse
+		var cleanResults []string
+		for _, result := range toolResults {
+			// Remove markdown formatting and emoji
+			cleaned := strings.TrimPrefix(result, "✅ **")
+			cleaned = strings.TrimPrefix(cleaned, "❌ **")
+			// Remove the tool name prefix (e.g., "search**: ")
+			if idx := strings.Index(cleaned, "**: "); idx != -1 {
+				cleaned = cleaned[idx+4:]
+			} else if idx := strings.Index(cleaned, "**: "); idx != -1 {
+				cleaned = cleaned[idx+3:]
+			}
+			cleanResults = append(cleanResults, cleaned)
 		}
+		resultsText := strings.Join(cleanResults, "\n\n")
 		
+		// Add an assistant message saying it used tools
+		// This mimics the flow the LLM expects
+		messages = append(messages, model.Message{
+			Role:    "assistant",
+			Content: "Let me use the available tools to help answer your question.",
+		})
+		
+		// Add a user message with the tool results
+		// Frame it as the user providing feedback on what the tools returned
+		userFollowUp := fmt.Sprintf("The tools returned the following information:\n\n%s\n\nPlease use this information to answer my original question.", resultsText)
+		
+		messages = append(messages, model.Message{
+			Role:    "user",
+			Content: userFollowUp,
+		})
+		
+		// Now continue the conversation - use regular Chat (not ChatWithTools)
+		// since we already executed the tools
 		response, err := v.model.Chat(ctx, messages, model.GenerateOptions{
 			Temperature: 0.7,
 			MaxTokens:   1024,
