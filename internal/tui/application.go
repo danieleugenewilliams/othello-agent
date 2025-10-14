@@ -188,6 +188,11 @@ func NewApplicationWithAgent(keymap KeyMap, styles Styles, agent AgentInterface)
 	// For now, create a basic Ollama model instance
 	m := model.NewOllamaModel("http://localhost:11434", "qwen2.5:3b")
 	
+	// Set the model on the agent for LLM-based metadata extraction
+	if agentWithModel, ok := agent.(interface{ SetModel(model.Model) }); ok {
+		agentWithModel.SetModel(m)
+	}
+	
 	app := &Application{
 		currentView: ChatViewType,
 		keymap:      keymap,

@@ -296,6 +296,7 @@ func transformMCPResponse(rawData interface{}) interface{} {
 type Agent struct {
 	config       *config.Config
 	logger       *log.Logger
+	model        model.Model     // For LLM-based metadata extraction
 	mcpRegistry  *mcp.ToolRegistry
 	mcpManager   *MCPManager
 	toolExecutor *mcp.ToolExecutor
@@ -406,6 +407,12 @@ func (a *agentLogger) Debug(msg string, args ...interface{}) {
 }
 
 // Start starts the agent with the given context
+// SetModel sets the model for LLM-based metadata extraction
+func (a *Agent) SetModel(m model.Model) {
+	a.model = m
+	a.logger.Printf("Model set for LLM-based metadata extraction")
+}
+
 func (a *Agent) Start(ctx context.Context) error {
 	a.logger.Println("Starting Othello AI Agent")
 	
@@ -652,8 +659,11 @@ func (a *Agent) ExecuteToolUnifiedWithContext(ctx context.Context, toolName stri
 
 	a.logger.Printf("Tool %s executed successfully (unified with context)", toolName)
 
-	// Use enhanced MCP processor with conversation context
-	processor := &ToolResultProcessor{Logger: a.logger}
+	// Use enhanced MCP processor with conversation context and model for LLM-based extraction
+	processor := &ToolResultProcessor{
+		Logger: a.logger,
+		Model:  a.model,
+	}
 	a.logger.Printf("[UNIFIED] About to call processor with toolName=%s and conversation context", toolName)
 	processedResult, err := processor.ProcessToolResultWithContext(ctx, toolName, result.Result, convContext)
 	a.logger.Printf("[UNIFIED] Context-aware processor returned result length=%d, error=%v", len(processedResult), err)

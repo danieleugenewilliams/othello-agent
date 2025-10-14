@@ -16,6 +16,7 @@ import (
 type ToolResultProcessor struct {
 	// Can add configuration here later (e.g., verbosity level)
 	Logger *log.Logger
+	Model  model.Model // Optional: for LLM-based metadata extraction
 }
 
 
@@ -1037,7 +1038,7 @@ func (p *ToolResultProcessor) extractAndStoreMetadata(rawResult interface{}, con
 	p.logf("[METADATA] Unable to extract metadata from result type: %T", rawResult)
 }
 
-// extractMetadataFromMCPResult extracts metadata from MCP ToolResult
+// extractMetadataFromMCPResult extracts metadata from MCP ToolResult using LLM
 func (p *ToolResultProcessor) extractMetadataFromMCPResult(toolResult *mcp.ToolResult, convContext *model.ConversationContext) {
 	p.logf("[METADATA-MCP] Extracting from MCP ToolResult with %d content items", len(toolResult.Content))
 	
@@ -1063,11 +1064,11 @@ func (p *ToolResultProcessor) extractMetadataFromMCPResult(toolResult *mcp.ToolR
 				}
 			}
 			
-			// If not JSON, try regex extraction for common patterns
-			p.logf("[METADATA-MCP] Attempting regex-based extraction from human-readable text...")
-			extracted := p.extractMetadataWithRegex(trimmed, convContext)
+			// If not JSON, use LLM to extract metadata from natural language
+			p.logf("[METADATA-MCP] Using LLM-based extraction from natural language text...")
+			extracted := p.extractMetadataWithLLM(trimmed, convContext)
 			if extracted > 0 {
-				p.logf("[METADATA-MCP] Extracted %d metadata fields using regex", extracted)
+				p.logf("[METADATA-MCP] Extracted %d metadata fields using LLM", extracted)
 				return
 			}
 		}
@@ -1079,34 +1080,213 @@ func (p *ToolResultProcessor) extractMetadataFromMCPResult(toolResult *mcp.ToolR
 func (p *ToolResultProcessor) extractMetadataWithRegex(text string, convContext *model.ConversationContext) int {
 	extracted := 0
 	
-	// Common patterns for IDs and metadata in human-readable text
-	patterns := map[string]*regexp.Regexp{
-		// Match "ID: <uuid>" or "with ID: <uuid>" or "memory_id: <uuid>"
-		"memory_id": regexp.MustCompile(`(?i)(?:memory[_\s-]?)?(?:with\s+)?ID:\s*([a-f0-9\-]{36})`),
-		// Match "document ID: <uuid>" or "document_id: <uuid>"
-		"document_id": regexp.MustCompile(`(?i)document[_\s-]?ID:\s*([a-f0-9\-]{36})`),
-		// Match "session ID: <uuid>" or "session_id: <uuid>"
-		"session_id": regexp.MustCompile(`(?i)session[_\s-]?ID:\s*([a-f0-9\-]{36})`),
-		// Match "category ID: <uuid>" or "category_id: <uuid>"
-		"category_id": regexp.MustCompile(`(?i)category[_\s-]?ID:\s*([a-f0-9\-]{36})`),
-		// Match "total: <number>" or "count: <number>"
-		"total": regexp.MustCompile(`(?i)(?:total|count):\s*(\d+)`),
+	// Universal pattern: Extract any "key: value" or "key = value" pairs
+	// This catches: "memory_id: abc123", "ID: xyz", "count: 42", "status: completed", etc.
+	keyValuePattern := regexp.MustCompile(`(?i)([a-z][a-z0-9_-]*)\s*[:\=]\s*([a-f0-9\-]{8,}|\d+|[a-z][a-z0-9_-]*[a-z0-9])`)
+	
+	matches := keyValuePattern.FindAllStringSubmatch(text, -1)
+	for _, match := range matches {
+		if len(match) > 2 {
+			key := strings.ToLower(match[1])
+			value := match[2]
+			
+			// Normalize common key variations
+			normalizedKey := normalizeMetadataKey(key)
+			
+			// Only extract if it looks like useful metadata (identifiers, counts, statuses)
+			if isUsefulMetadata(normalizedKey, value) {
+				// Skip if already exists
+				if _, exists := convContext.ExtractedMetadata[normalizedKey]; !exists {
+					convContext.ExtractedMetadata[normalizedKey] = value
+					extracted++
+					p.logf("[METADATA-REGEX] Extracted %s = %v", normalizedKey, value)
+				}
+			}
+		}
 	}
 	
-	for key, pattern := range patterns {
-		if matches := pattern.FindStringSubmatch(text); len(matches) > 1 {
-			value := matches[1]
-			// Skip if already exists
-			if _, exists := convContext.ExtractedMetadata[key]; exists {
-				continue
-			}
-			convContext.ExtractedMetadata[key] = value
+	// Special case: Extract UUIDs from common phrases like "with ID: <uuid>" or "successfully with ID: <uuid>"
+	// This handles cases where the key might not be explicitly stated
+	uuidPattern := regexp.MustCompile(`(?i)(?:with\s+)?ID:\s*([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})`)
+	if uuidMatches := uuidPattern.FindStringSubmatch(text); len(uuidMatches) > 1 {
+		uuid := uuidMatches[1]
+		// Infer the key from context - if "memory" appears in the text, it's likely a memory_id
+		inferredKey := inferIDKey(text)
+		if _, exists := convContext.ExtractedMetadata[inferredKey]; !exists {
+			convContext.ExtractedMetadata[inferredKey] = uuid
 			extracted++
-			p.logf("[METADATA-REGEX] Extracted %s = %v", key, value)
+			p.logf("[METADATA-REGEX] Extracted (inferred) %s = %v", inferredKey, uuid)
 		}
 	}
 	
 	return extracted
+}
+
+// normalizeMetadataKey normalizes key names to standard forms
+func normalizeMetadataKey(key string) string {
+	key = strings.ToLower(key)
+	// Remove common prefixes/suffixes that don't add meaning
+	key = strings.TrimPrefix(key, "the_")
+	key = strings.TrimPrefix(key, "a_")
+	// Normalize separators
+	key = strings.ReplaceAll(key, "-", "_")
+	return key
+}
+
+// isUsefulMetadata determines if a key-value pair is worth extracting
+func isUsefulMetadata(key, value string) bool {
+	// Check if key ends with common identifier suffixes
+	if strings.HasSuffix(key, "_id") || 
+	   strings.HasSuffix(key, "id") ||
+	   strings.HasSuffix(key, "_uuid") ||
+	   strings.HasSuffix(key, "_key") ||
+	   strings.HasSuffix(key, "_ref") ||
+	   strings.HasSuffix(key, "_handle") ||
+	   strings.HasSuffix(key, "_code") {
+		return true
+	}
+	
+	// Check for common metadata keys
+	usefulKeys := []string{
+		"id", "uuid", "key", "ref", "handle", "code",
+		"name", "title", "type", "kind", "category", "class",
+		"status", "state", "phase", "stage",
+		"count", "total", "size", "length", "number",
+		"domain", "session", "user", "owner", "author",
+		"version", "revision", "index", "position",
+		"priority", "importance", "weight", "score",
+		"result", "outcome", "success",
+	}
+	for _, useful := range usefulKeys {
+		if key == useful || strings.Contains(key, useful) {
+			return true
+		}
+	}
+	
+	// Check if value looks like an identifier (UUID, hash, code)
+	if len(value) >= 8 {
+		// UUID pattern
+		if matched, _ := regexp.MatchString(`^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$`, value); matched {
+			return true
+		}
+		// Hex hash pattern (at least 8 chars)
+		if matched, _ := regexp.MatchString(`^[a-f0-9]{8,}$`, value); matched {
+			return true
+		}
+		// Alphanumeric code pattern (mixed case, dashes, underscores)
+		if matched, _ := regexp.MatchString(`^[a-zA-Z0-9_-]{8,}$`, value); matched {
+			return true
+		}
+	}
+	
+	// Numeric values are useful
+	if matched, _ := regexp.MatchString(`^\d+$`, value); matched {
+		return true
+	}
+	
+	// Short string values that look like statuses or types
+	if len(value) <= 20 && !strings.Contains(value, " ") {
+		return true
+	}
+	
+	return false
+}
+
+// inferIDKey infers the ID key from context in the text
+func inferIDKey(text string) string {
+	textLower := strings.ToLower(text)
+	
+	// Check for context keywords
+	contextPatterns := map[string]string{
+		"memory":   "memory_id",
+		"document": "document_id",
+		"session":  "session_id",
+		"category": "category_id",
+		"domain":   "domain_id",
+		"user":     "user_id",
+		"file":     "file_id",
+		"record":   "record_id",
+		"item":     "item_id",
+		"entity":   "entity_id",
+	}
+	
+	for context, key := range contextPatterns {
+		if strings.Contains(textLower, context) {
+			return key
+		}
+	}
+	
+	// Default to generic "id" if no context found
+	return "id"
+}
+
+// extractMetadataWithLLM uses the LLM to extract relevant metadata from natural language text
+func (p *ToolResultProcessor) extractMetadataWithLLM(text string, convContext *model.ConversationContext) int {
+	// If no model available, fall back to regex
+	if p.Model == nil {
+		p.logf("[METADATA-LLM] No model available, skipping LLM extraction")
+		return 0
+	}
+	
+	p.logf("[METADATA-LLM] Using LLM to extract metadata from text")
+	
+	// Create a prompt that asks the LLM to extract metadata in a structured format
+	prompt := fmt.Sprintf(`Extract key-value metadata from the following tool response text. Focus on identifiers (IDs, UUIDs, keys), counts/numbers, and status information that would be useful for follow-up requests.
+
+Tool Response:
+%s
+
+Please extract metadata as a JSON object with key-value pairs. Only include information explicitly stated in the text. Use lowercase_with_underscores for keys. If you find an ID without a specific type, infer the type from context (e.g., if "memory" is mentioned, use "memory_id").
+
+Respond ONLY with a JSON object, no explanation:`, text)
+	
+	ctx := context.Background()
+	response, err := p.Model.Generate(ctx, prompt, model.GenerateOptions{
+		Temperature: 0.1, // Low temperature for consistent extraction
+		MaxTokens:   500,
+	})
+	
+	if err != nil {
+		p.logf("[METADATA-LLM] LLM extraction failed: %v", err)
+		return 0
+	}
+	
+	// Parse the LLM's response as JSON
+	responseText := strings.TrimSpace(response.Content)
+	p.logf("[METADATA-LLM] LLM response: %s", truncateString(responseText, 200))
+	
+	// Try to extract JSON from the response (handle cases where LLM adds explanation)
+	if !strings.HasPrefix(responseText, "{") {
+		// Try to find JSON in the response
+		if start := strings.Index(responseText, "{"); start != -1 {
+			if end := strings.LastIndex(responseText, "}"); end != -1 && end > start {
+				responseText = responseText[start : end+1]
+			}
+		}
+	}
+	
+	var extracted map[string]interface{}
+	if err := json.Unmarshal([]byte(responseText), &extracted); err != nil {
+		p.logf("[METADATA-LLM] Failed to parse LLM response as JSON: %v", err)
+		return 0
+	}
+	
+	// Add extracted metadata to conversation context
+	count := 0
+	for key, value := range extracted {
+		// Skip if already exists
+		if _, exists := convContext.ExtractedMetadata[key]; exists {
+			continue
+		}
+		
+		// Normalize the key
+		normalizedKey := normalizeMetadataKey(key)
+		convContext.ExtractedMetadata[normalizedKey] = value
+		count++
+		p.logf("[METADATA-LLM] Extracted %s = %v", normalizedKey, value)
+	}
+	
+	return count
 }
 
 // truncateString truncates a string to maxLen characters
