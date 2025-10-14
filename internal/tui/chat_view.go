@@ -270,16 +270,6 @@ func (v *ChatView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				v.requestID = fmt.Sprintf("req_%d", time.Now().UnixNano())
 				v.waitingForResponse = true
 				
-				// Debug: Check conversation context before sending to model
-				if v.conversationContext != nil {
-					fmt.Printf("[CHAT-DEBUG] ConversationContext exists with %d metadata fields before generateResponseWithTools\n", len(v.conversationContext.ExtractedMetadata))
-					for k, v := range v.conversationContext.ExtractedMetadata {
-						fmt.Printf("[CHAT-DEBUG]   %s = %v\n", k, v)
-					}
-				} else {
-					fmt.Printf("[CHAT-DEBUG] ConversationContext is NIL before generateResponseWithTools\n")
-				}
-				
 				// Send to model
 				if v.agent != nil {
 					// Use tool-aware response generation
@@ -316,9 +306,6 @@ func (v *ChatView) View() string {
 	header := v.styles.ViewHeader.
 		Width(v.width).
 		Render("💬 Chat")
-
-	// Messages content
-	v.viewport.SetContent(v.renderMessages())
 
 	// Input section
 	inputSection := v.renderInput()
@@ -604,10 +591,6 @@ func (v *ChatView) generateResponseWithTools(message, id string) tea.Cmd {
 		if v.conversationContext != nil && len(v.conversationContext.ExtractedMetadata) > 0 {
 			metadataContext := v.buildMetadataContextForModel()
 			if metadataContext != "" {
-				// Log what metadata we're injecting (for debugging)
-				fmt.Printf("[CHAT] Injecting metadata context with %d fields\n", len(v.conversationContext.ExtractedMetadata))
-				fmt.Printf("[CHAT] Metadata context: %s\n", metadataContext)
-				
 				// Insert metadata as a system message before the user message
 				messages = []model.Message{
 					{Role: "system", Content: metadataContext},
@@ -675,13 +658,10 @@ func (v *ChatView) executeToolCallsUnified(toolCalls []model.ToolCall, requestID
 
 		// Update persistent conversation context for this interaction
 		if v.conversationContext == nil {
-			fmt.Printf("[EXEC-DEBUG] Creating NEW conversationContext\n")
 			v.conversationContext = &model.ConversationContext{
 				SessionType:       "chat",
 				ExtractedMetadata: make(map[string]interface{}),
 			}
-		} else {
-			fmt.Printf("[EXEC-DEBUG] Using EXISTING conversationContext with %d metadata fields\n", len(v.conversationContext.ExtractedMetadata))
 		}
 		v.conversationContext.History = v.conversationHistory
 		v.conversationContext.UserQuery = userMessage
@@ -689,12 +669,7 @@ func (v *ChatView) executeToolCallsUnified(toolCalls []model.ToolCall, requestID
 		for _, toolCall := range toolCalls {
 			if v.agent != nil {
 				// Use the persistent conversation context (metadata accumulates across tool calls)
-				fmt.Printf("[EXEC-DEBUG] Executing tool %s with conversation context\n", toolCall.Name)
 				result, err := v.agent.ExecuteToolUnifiedWithContext(ctx, toolCall.Name, toolCall.Arguments, v.conversationContext)
-				fmt.Printf("[EXEC-DEBUG] After execution, conversationContext has %d metadata fields\n", len(v.conversationContext.ExtractedMetadata))
-				for k, val := range v.conversationContext.ExtractedMetadata {
-					fmt.Printf("[EXEC-DEBUG]   %s = %v\n", k, val)
-				}
 				if err != nil {
 					allResults = append(allResults, fmt.Sprintf("❌ Tool %s failed: %v", toolCall.Name, err))
 				} else {
