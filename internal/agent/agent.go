@@ -416,15 +416,8 @@ func (a *Agent) SetModel(m model.Model) {
 func (a *Agent) Start(ctx context.Context) error {
 	a.logger.Println("Starting Othello AI Agent")
 	
-	// Load MCP servers from standard mcp.json or fallback to config.yaml
-	mcpConfig, err := config.LoadMCPConfig()
-	if err != nil {
-		a.logger.Printf("Failed to load MCP config: %v", err)
-		return fmt.Errorf("failed to load MCP config: %w", err)
-	}
-	
-	// Convert MCP standard format to internal ServerConfig format
-	servers := config.ConvertMCPToServerConfigs(mcpConfig)
+	// Use the agent's own configuration instead of loading from filesystem
+	servers := a.config.MCP.Servers
 	
 	// Initialize MCP servers
 	for _, serverCfg := range servers {
