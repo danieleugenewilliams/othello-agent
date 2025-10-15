@@ -235,7 +235,7 @@ func (ic *IntentClassifier) generateToolSuggestions(userInput string, intent Int
 }
 
 // calculateToolConfidence calculates confidence score for a specific tool
-func (ic *IntentClassifier) calculateToolConfidence(userInput, inputLower string, tool ToolMetadata, capabilityMatch bool, intentConfidence float64) float64 {
+func (ic *IntentClassifier) calculateToolConfidence(_, inputLower string, tool ToolMetadata, capabilityMatch bool, intentConfidence float64) float64 {
 	confidence := 0.0
 
 	// Base confidence from intent classification
@@ -298,7 +298,7 @@ func (ic *IntentClassifier) generateReasoning(tool ToolMetadata, intent Intent, 
 	return fmt.Sprintf("This tool might be useful because %s", tool.UsagePattern)
 }
 
-// extractPotentialParameters attempts to extract parameters from user input
+// extractPotentialParameters attempts to extract parameters from user input with intelligent optimization
 func (ic *IntentClassifier) extractPotentialParameters(userInput string, tool ToolMetadata) map[string]interface{} {
 	parameters := make(map[string]interface{})
 
@@ -313,7 +313,7 @@ func (ic *IntentClassifier) extractPotentialParameters(userInput string, tool To
 
 	inputLower := strings.ToLower(userInput)
 
-	// Look for common parameter patterns
+	// Look for common parameter patterns with intelligent optimization
 	for paramName, paramInfo := range properties {
 		paramMap, ok := paramInfo.(map[string]interface{})
 		if !ok {
@@ -321,6 +321,7 @@ func (ic *IntentClassifier) extractPotentialParameters(userInput string, tool To
 		}
 
 		paramType, _ := paramMap["type"].(string)
+		paramDesc, _ := paramMap["description"].(string)
 
 		// Try to extract based on parameter name and type
 		switch paramName {
@@ -342,6 +343,39 @@ func (ic *IntentClassifier) extractPotentialParameters(userInput string, tool To
 			// Extract numeric values
 			if paramType == "integer" || paramType == "number" {
 				if value := ic.extractNumericValue(inputLower); value > 0 {
+					parameters[paramName] = value
+				}
+			}
+		// Intelligent optimization parameters
+		case "use_ai":
+			// Enable AI for semantic tasks, complex queries, or when user wants intelligent results
+			if paramType == "boolean" {
+				parameters[paramName] = ic.shouldUseAI(userInput, tool)
+			}
+		case "response_format":
+			// Choose optimal response format based on query complexity and context
+			if paramType == "string" {
+				parameters[paramName] = ic.chooseResponseFormat(userInput, tool)
+			}
+		case "search_type":
+			// Choose optimal search type based on query characteristics
+			if paramType == "string" {
+				parameters[paramName] = ic.chooseSearchType(userInput, tool)
+			}
+		case "limit":
+			// Set intelligent limits based on query scope
+			if paramType == "integer" || paramType == "number" {
+				parameters[paramName] = ic.chooseLimit(userInput, tool)
+			}
+		case "session_filter_mode":
+			// Choose session filtering based on query scope
+			if paramType == "string" {
+				parameters[paramName] = ic.chooseSessionFilterMode(userInput, tool)
+			}
+		default:
+			// Check parameter description for optimization hints
+			if ic.isOptimizationParameter(paramName, paramDesc) {
+				if value := ic.extractOptimizationValue(paramName, paramDesc, userInput, tool); value != nil {
 					parameters[paramName] = value
 				}
 			}
@@ -426,6 +460,211 @@ func (ic *IntentClassifier) extractNumericValue(input string) int {
 	}
 
 	return 0
+}
+
+// shouldUseAI determines whether AI should be enabled for better results
+func (ic *IntentClassifier) shouldUseAI(userInput string, _ ToolMetadata) bool {
+	inputLower := strings.ToLower(userInput)
+
+	// Enable AI for semantic/conceptual queries
+	semanticIndicators := []string{
+		"find", "search", "discover", "related", "similar", "about", "regarding",
+		"understand", "explain", "analyze", "insights", "patterns", "connections",
+		"meaning", "semantic", "concept", "idea", "theme", "topic",
+	}
+
+	for _, indicator := range semanticIndicators {
+		if strings.Contains(inputLower, indicator) {
+			return true
+		}
+	}
+
+	// Enable AI for complex or long queries (likely needs intelligent understanding)
+	words := strings.Fields(userInput)
+	if len(words) > 5 {
+		return true
+	}
+
+	// Enable AI for questions
+	if strings.Contains(inputLower, "?") ||
+		strings.HasPrefix(inputLower, "what") ||
+		strings.HasPrefix(inputLower, "how") ||
+		strings.HasPrefix(inputLower, "why") ||
+		strings.HasPrefix(inputLower, "when") ||
+		strings.HasPrefix(inputLower, "where") {
+		return true
+	}
+
+	return false
+}
+
+// chooseResponseFormat selects optimal response format based on context
+func (ic *IntentClassifier) chooseResponseFormat(userInput string, _ ToolMetadata) string {
+	inputLower := strings.ToLower(userInput)
+
+	// Use concise for quick lookups or when user wants brief info
+	briefIndicators := []string{
+		"quick", "brief", "summary", "overview", "list", "count", "how many",
+		"just show", "simply", "basic", "short",
+	}
+
+	for _, indicator := range briefIndicators {
+		if strings.Contains(inputLower, indicator) {
+			return "concise"
+		}
+	}
+
+	// Use ids_only for very specific operations
+	if strings.Contains(inputLower, "id") || strings.Contains(inputLower, "identifier") {
+		return "ids_only"
+	}
+
+	// Use detailed for analysis, complex queries, or when user wants full information
+	detailedIndicators := []string{
+		"detailed", "complete", "full", "everything", "all", "analyze", "analysis",
+		"explain", "understand", "comprehensive", "thorough", "deep",
+	}
+
+	for _, indicator := range detailedIndicators {
+		if strings.Contains(inputLower, indicator) {
+			return "detailed"
+		}
+	}
+
+	// Default to concise for better performance
+	return "concise"
+}
+
+// chooseSearchType selects optimal search type based on query characteristics
+func (ic *IntentClassifier) chooseSearchType(userInput string, _ ToolMetadata) string {
+	inputLower := strings.ToLower(userInput)
+
+	// Use semantic for conceptual/meaning-based searches
+	semanticIndicators := []string{
+		"about", "related", "similar", "concept", "meaning", "understand",
+		"explain", "find memories", "search for", "discover", "insights",
+	}
+
+	for _, indicator := range semanticIndicators {
+		if strings.Contains(inputLower, indicator) {
+			return "semantic"
+		}
+	}
+
+	// Use tags for explicit tag mentions
+	if strings.Contains(inputLower, "tag") || strings.Contains(inputLower, "tagged") {
+		return "tags"
+	}
+
+	// Use date_range for time-based queries
+	dateIndicators := []string{
+		"today", "yesterday", "week", "month", "year", "recent", "lately",
+		"since", "before", "after", "date", "time", "when",
+	}
+
+	for _, indicator := range dateIndicators {
+		if strings.Contains(inputLower, indicator) {
+			return "date_range"
+		}
+	}
+
+	// Default to semantic for best results
+	return "semantic"
+}
+
+// chooseLimit sets intelligent result limits based on query scope
+func (ic *IntentClassifier) chooseLimit(userInput string, _ ToolMetadata) int {
+	inputLower := strings.ToLower(userInput)
+
+	// High limit for comprehensive searches
+	if strings.Contains(inputLower, "all") ||
+		strings.Contains(inputLower, "everything") ||
+		strings.Contains(inputLower, "complete") {
+		return 50
+	}
+
+	// Low limit for quick lookups
+	if strings.Contains(inputLower, "quick") ||
+		strings.Contains(inputLower, "brief") ||
+		strings.Contains(inputLower, "few") {
+		return 5
+	}
+
+	// Medium limit for most queries
+	return 10
+}
+
+// chooseSessionFilterMode selects session filtering based on query scope
+func (ic *IntentClassifier) chooseSessionFilterMode(userInput string, _ ToolMetadata) string {
+	inputLower := strings.ToLower(userInput)
+
+	// Use session_only for current context
+	if strings.Contains(inputLower, "this session") ||
+		strings.Contains(inputLower, "current") ||
+		strings.Contains(inputLower, "today") {
+		return "session_only"
+	}
+
+	// Use all for comprehensive searches
+	if strings.Contains(inputLower, "all") ||
+		strings.Contains(inputLower, "everything") ||
+		strings.Contains(inputLower, "across") ||
+		strings.Contains(inputLower, "global") {
+		return "all"
+	}
+
+	// Default to all for best coverage
+	return "all"
+}
+
+// isOptimizationParameter checks if a parameter is likely for optimization
+func (ic *IntentClassifier) isOptimizationParameter(paramName, paramDesc string) bool {
+	optimizationKeywords := []string{
+		"optimize", "performance", "efficiency", "quality", "enhancement",
+		"improve", "better", "faster", "smarter", "intelligent", "ai", "semantic",
+		"confidence", "threshold", "enable", "disable", "auto", "smart",
+	}
+
+	paramLower := strings.ToLower(paramName + " " + paramDesc)
+
+	for _, keyword := range optimizationKeywords {
+		if strings.Contains(paramLower, keyword) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// extractOptimizationValue extracts values for optimization parameters based on description hints
+func (ic *IntentClassifier) extractOptimizationValue(_, paramDesc, userInput string, tool ToolMetadata) interface{} {
+	inputLower := strings.ToLower(userInput)
+	descLower := strings.ToLower(paramDesc)
+
+	// Boolean optimization parameters
+	if strings.Contains(descLower, "enable") || strings.Contains(descLower, "boolean") {
+		// Enable optimization features for complex/intelligent queries
+		if ic.shouldUseAI(userInput, tool) {
+			return true
+		}
+		return false
+	}
+
+	// Confidence/threshold parameters
+	if strings.Contains(descLower, "confidence") || strings.Contains(descLower, "threshold") {
+		// Higher confidence for specific queries, lower for broad exploration
+		if strings.Contains(inputLower, "specific") || strings.Contains(inputLower, "exact") {
+			return 0.8
+		}
+		return 0.5
+	}
+
+	// Mode/format parameters
+	if strings.Contains(descLower, "format") || strings.Contains(descLower, "mode") {
+		return ic.chooseResponseFormat(userInput, tool)
+	}
+
+	return nil
 }
 
 // findAlternativeTools finds similar tools that could also work
