@@ -50,7 +50,7 @@ Othello stores all configuration and data in `~/.othello/`:
 ~/.othello/
 ├── config.yaml          # Main configuration
 ├── history.db           # Conversation history
-├── servers.json         # MCP server registry
+├── mcp.json             # MCP server registry
 └── logs/                # Application logs
 ```
 
