@@ -18,6 +18,23 @@ import (
 	"github.com/danieleugenewilliams/othello-agent/internal/tui"
 )
 
+// LoggerAdapter adapts a standard log.Logger to the mcp.Logger interface
+type LoggerAdapter struct {
+	*log.Logger
+}
+
+func (l *LoggerAdapter) Info(msg string, args ...interface{}) {
+	l.Logger.Printf("[INFO] "+msg, args...)
+}
+
+func (l *LoggerAdapter) Error(msg string, args ...interface{}) {
+	l.Logger.Printf("[ERROR] "+msg, args...)
+}
+
+func (l *LoggerAdapter) Debug(msg string, args ...interface{}) {
+	l.Logger.Printf("[DEBUG] "+msg, args...)
+}
+
 // sanitizeAndParseJSON implements robust JSON parsing with multiple fallback strategies
 func sanitizeAndParseJSON(rawJSON string, logger *log.Logger) (interface{}, error) {
 	if logger != nil {
@@ -294,13 +311,14 @@ func transformMCPResponse(rawData interface{}) interface{} {
 
 // Agent represents the core agent instance
 type Agent struct {
-	config       *config.Config
-	logger       *log.Logger
-	model        model.Model     // For LLM-based metadata extraction
-	mcpRegistry  *mcp.ToolRegistry
-	mcpManager   *MCPManager
-	toolExecutor *mcp.ToolExecutor
-	updateChan   chan interface{} // Channel for broadcasting status updates
+	config              *config.Config
+	logger              *log.Logger
+	model               model.Model     // For LLM-based metadata extraction
+	mcpRegistry         *mcp.ToolRegistry
+	mcpManager          *MCPManager
+	toolExecutor        *mcp.ToolExecutor
+	universalIntegration *UniversalAgentIntegration // Intelligent tool calling system
+	updateChan          chan interface{} // Channel for broadcasting status updates
 }
 
 // Interface defines the agent's public API
@@ -416,8 +434,19 @@ func (a *Agent) SetModel(m model.Model) {
 func (a *Agent) Start(ctx context.Context) error {
 	a.logger.Println("Starting Othello AI Agent")
 	
-	// Use the agent's own configuration instead of loading from filesystem
+	// Load servers from main config (YAML)
 	servers := a.config.MCP.Servers
+
+	// Load additional servers from mcp.json
+	mcpConfig, err := config.LoadMCPConfig()
+	if err != nil {
+		a.logger.Printf("Warning: Failed to load mcp.json: %v", err)
+	} else {
+		// Convert and merge MCP servers
+		mcpServers := config.ConvertMCPToServerConfigs(mcpConfig)
+		servers = append(servers, mcpServers...)
+		a.logger.Printf("Loaded %d servers from mcp.json", len(mcpServers))
+	}
 	
 	// Initialize MCP servers
 	for _, serverCfg := range servers {
@@ -429,7 +458,11 @@ func (a *Agent) Start(ctx context.Context) error {
 		}
 		a.logger.Printf("Successfully connected to MCP server: %s", serverCfg.Name)
 	}
-	
+
+	// Initialize Universal Agent Integration for intelligent tool calling
+	a.universalIntegration = NewUniversalAgentIntegration(a.mcpRegistry, a.model, &LoggerAdapter{Logger: a.logger})
+	a.logger.Println("Universal Agent Integration initialized")
+
 	a.logger.Printf("Agent started with model: %s", a.config.Model.Name)
 	return nil
 }
@@ -523,9 +556,14 @@ func (a *Agent) GetMCPTools(ctx context.Context) ([]tui.Tool, error) {
 }
 
 // GetMCPToolsAsDefinitions converts MCP tools to model.ToolDefinition format
+// GetUniversalIntegration returns the universal agent integration for intelligent tool calling
+func (a *Agent) GetUniversalIntegration() interface{} {
+	return a.universalIntegration
+}
+
 func (a *Agent) GetMCPToolsAsDefinitions(ctx context.Context) ([]model.ToolDefinition, error) {
 	mcpTools := a.mcpRegistry.ListTools()
-	
+
 	// Use our new conversion function that properly handles JSON schemas
 	definitions := ConvertMCPToolsToDefinitions(mcpTools)
 	

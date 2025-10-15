@@ -17,6 +17,7 @@ type AgentInterface interface {
 	GetMCPServers() []ServerInfo
 	GetMCPTools(ctx context.Context) ([]Tool, error)
 	GetMCPToolsAsDefinitions(ctx context.Context) ([]model.ToolDefinition, error)
+	GetUniversalIntegration() interface{} // Returns *UniversalAgentIntegration but using interface{} to avoid import cycle
 	SubscribeToUpdates() <-chan interface{} // Channel for receiving status updates
 	ExecuteTool(ctx context.Context, toolName string, params map[string]interface{}) (*ToolExecutionResult, error)
 	ProcessToolResult(ctx context.Context, toolName string, result *mcp.ExecuteResult, userQuery string) (string, error)
